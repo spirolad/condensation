@@ -1,4 +1,0 @@
-resources:
-  - https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
-  - https://github.com/envoyproxy/gateway/releases/latest/download/install.yaml
-  - https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
