@@ -104,8 +104,6 @@ services:
       - postgres_game_data:/var/lib/postgresql/data
       - ./scripts/V1__create_game_catalog_schema.sql:/docker-entrypoint-initdb.d/V1__create_game_catalog_schema.sql:ro
       - ./scripts/seed_games.sql:/docker-entrypoint-initdb.d/seed_games.sql:ro
-    networks:
-     monitoring:
 
   backend:
     build:
@@ -126,10 +124,6 @@ services:
     depends_on:
       postgres-game:
         condition: service_healthy
-    networks:
-      monitoring:
-        aliases:
-          - backend
 
   prometheus:
     image: prom/prometheus:latest
@@ -141,8 +135,6 @@ services:
       - prometheus_data:/prometheus
     depends_on:
       - backend
-    networks:
-      - monitoring
 
   grafana:
     image: grafana/grafana:9.5.8
@@ -158,8 +150,6 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
-    networks:
-      - monitoring
 
   e2e-tests:
     build:
@@ -179,8 +169,4 @@ volumes:
   kafka_data:
   prometheus_data:
   grafana_data:
-
-networks:
-  monitoring:
-    driver: bridge
 
