@@ -104,31 +104,14 @@ services:
       - postgres_game_data:/var/lib/postgresql/data
       - ./scripts/V1__create_game_catalog_schema.sql:/docker-entrypoint-initdb.d/V1__create_game_catalog_schema.sql:ro
       - ./scripts/seed_games.sql:/docker-entrypoint-initdb.d/seed_games.sql:ro
-
-  kafka:
-    image: apache/kafka:3.7.0
-    container_name: catalog_kafka
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-    volumes:
-      - kafka_data:/bitnami/kafka
+    networks:
+     monitoring:
 
   backend:
     build:
       context: ./backend
     container_name: catalog_backend
+    hostname: backend
     ports:
       - "8080:8080"
     environment:
@@ -136,22 +119,47 @@ services:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - AUTH_URL=http://auth:80
       - INTERNAL_SECRET=${INTERNAL_SECRET:-webhook-internal-secret}
+      # Expose actuator prometheus endpoint so Prometheus can scrape metrics
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_BASE_PATH=/actuator
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
     depends_on:
       postgres-game:
         condition: service_healthy
-      kafka:
-        condition: service_started
+    networks:
+      monitoring:
+        aliases:
+          - backend
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
-      - "8082:8080"
-    environment:
-      - KAFKA_CLUSTERS_0_NAME=Local-Catalog-Cluster
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
     depends_on:
-      - kafka
+      - backend
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:9.5.8
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
 
   e2e-tests:
     build:
@@ -169,3 +177,10 @@ volumes:
   postgres_data:
   postgres_game_data:
   kafka_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring:
+    driver: bridge
+
