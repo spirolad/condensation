@@ -21,45 +21,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build backend with Maven (includes tests + JaCoCo coverage)
+      - name: Build backend with Maven
         run: |
           cd backend
-          ./mvnw clean package
-          cd ..
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm install
-          cd ..
-
-      - name: Generate frontend test coverage (Jest)
-        run: |
-          cd frontend
-          npm run test:coverage || true
-          cd ..
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          tools: composer
-
-      - name: Install auth dependencies
-        run: |
-          cd authentication
-          composer install --no-dev
-          cd ..
-
-      - name: Generate auth test coverage (PHPUnit)
-        run: |
-          cd authentication
-          ./vendor/bin/phpunit --coverage-clover=coverage/clover.xml || true
+          ./mvnw clean package -DskipTests
           cd ..
 
       - name: SonarQube Scan

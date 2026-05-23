@@ -17,12 +17,6 @@
             <directory>app</directory>
         </include>
     </source>
-    <coverage processUncoveredFiles="true">
-        <report>
-            <clover outputFile="coverage/clover.xml"/>
-            <text outputFile="coverage/coverage.txt" showUncoveredFiles="false"/>
-        </report>
-    </coverage>
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:7A1oH1b6E1o28qV1b9aZ2Y2qP2c7Q1x5cE5u6Y5t6F4="/>
