@@ -35,13 +35,13 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          bun install
+          npm install
           cd ..
 
       - name: Generate frontend test coverage (Jest)
         run: |
           cd frontend
-          bun run test:coverage || true
+          npm run test:coverage || true
           cd ..
 
       - name: Set up PHP
