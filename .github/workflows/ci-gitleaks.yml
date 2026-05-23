@@ -1,0 +1,43 @@
+name: CI - Gitleaks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    name: Scan repository for secrets with Gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks and produce JSON report
+        id: run_gitleaks
+        run: |
+          set -euo pipefail
+          rm -f ./gitleaks-report.json
+          if docker run --rm -v "${GITHUB_WORKSPACE}:/src" zricethezav/gitleaks:latest detect --source=/src --report-format=json --report-path=/src/gitleaks-report.json; then
+            echo "GITLEAKS_EXIT=0" >> $GITHUB_ENV
+          else
+            echo "GITLEAKS_EXIT=1" >> $GITHUB_ENV
+          fi
+
+      - name: Upload gitleaks JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+      - name: Fail if gitleaks found secrets
+        if: env.GITLEAKS_EXIT == '1'
+        run: |
+          echo "Secrets detected by gitleaks. See gitleaks-report artifact for details." >&2
+          exit 1
+
