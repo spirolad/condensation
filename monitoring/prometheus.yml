@@ -8,6 +8,15 @@ scrape_configs:
     static_configs:
       - targets: ['backend:8080']
 
-# Keep default rule files empty for now
+  - job_name: 'frontend'
+    metrics_path: '/api/metrics'
+    static_configs:
+      - targets: ['frontend:3000']
+
+  - job_name: 'auth'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['auth:80']
+
 rule_files: []
 

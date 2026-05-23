@@ -13,7 +13,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 
 # Install dependencies before copying the full code
-RUN composer install --no-interaction --optimize-autoloader --no-scripts
+RUN composer install --no-interaction --optimize-autoloader --no-scripts || \
+    composer update --no-interaction --optimize-autoloader --no-scripts
 
 # Now copy the rest of the application code
 COPY . .

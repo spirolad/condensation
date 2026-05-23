@@ -7,6 +7,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Prometheus metrics endpoint (public)
+Route::get('/metrics', [\App\Http\Controllers\MetricsController::class, 'metrics']);
+
 Route::get('/dashboard', function () {
     return redirect(config('app.frontend_url'));
 })->middleware(['auth'])->name('dashboard');

@@ -33,6 +33,12 @@ export async function middleware(req: NextRequest) {
   if (accessToken || !refreshToken) {
     const passthrough = new Headers(req.headers);
     passthrough.set("x-pathname", pathnameWithSearch);
+    try {
+      const { getRequestCounter } = await import('./lib/metrics');
+      const counter = getRequestCounter();
+      if (counter) counter.inc();
+    } catch (e) {
+    }
     return NextResponse.next({ request: { headers: passthrough } });
   }
 

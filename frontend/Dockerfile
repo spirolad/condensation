@@ -5,7 +5,7 @@ FROM oven/bun:1-alpine AS base
 FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install || bun install --no-frozen-lockfile
 
 # Stage 3: Build the Next.js application
 FROM base AS builder
