@@ -98,7 +98,7 @@ resource "aws_instance" "app" {
   iam_instance_profile   = "LabInstanceProfile"
 
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  subnet_id              = data.aws_subnets.default.ids[0]
+  subnet_id              = data.aws_subnets.default.ids[1]
 
   tags = {
     Name = "${var.environment}-app-ec2"
