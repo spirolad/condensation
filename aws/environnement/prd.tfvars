@@ -16,7 +16,7 @@ db_game_username          = "user_prd"
 
 backup_retention_period = 30
 skip_final_snapshot     = true
-deletion_protection     = true
+deletion_protection     = false
 
 allowed_cidr_blocks = []
 

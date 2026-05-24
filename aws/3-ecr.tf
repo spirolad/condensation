@@ -1,4 +1,3 @@
-/*
 resource "aws_ecr_repository" "auth" {
   name                 = "${var.environment}-auth"
   image_tag_mutability = "MUTABLE"
@@ -32,7 +31,6 @@ resource "aws_ecr_lifecycle_policy" "auth" {
     ]
   })
 }
-*/
 
 
 resource "aws_ecr_repository" "frontend" {

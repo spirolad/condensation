@@ -24,6 +24,20 @@ output "rds_master_password_secret_arn" {
   value       = aws_db_instance.postgres.master_user_secret[0].secret_arn
 }
 
+output "rds_game_address" {
+  description = "RDS instance address"
+  value       = aws_db_instance.postgres.address
+}
+
+
+output "rds_game_port" {
+  description = "RDS instance port"
+  value       = aws_db_instance.postgres_game.port
+}
+
+
+
+
 # ECR Outputs
 output "ecr_frontend_repository_url" {
   description = "URL of the ECR repository for frontend"
@@ -44,6 +58,18 @@ output "ecr_backend_repository_arn" {
   description = "ARN of the ECR repository for backend"
   value       = aws_ecr_repository.backend.arn
 }
+
+output "ecr_auth_repository_url" {
+  description = "URL of the ECR repository for frontend"
+  value       = aws_ecr_repository.auth.repository_url
+}
+
+output "ecr_auth_repository_arn" {
+  description = "ARN of the ECR repository for frontend"
+  value       = aws_ecr_repository.auth.arn
+}
+
+
 
 # EC2 Outputs
 output "ec2_instance_id" {

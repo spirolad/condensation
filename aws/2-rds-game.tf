@@ -43,7 +43,7 @@ resource "aws_security_group" "rds_game_postgres" {
 
 # RDS PostgreSQL Instance
 resource "aws_db_instance" "postgres_game" {
-  identifier = "${var.db_game_name}-db_game"
+  identifier = "${var.db_game_name}-db-game"
 
   engine         = "postgres"
   engine_version = "15"
