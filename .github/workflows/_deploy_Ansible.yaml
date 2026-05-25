@@ -1,0 +1,63 @@
+name: _Deploy with Ansible
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+    secrets:
+      EC2_HOST:
+        description: "EC2 SSH host"
+        required: true
+      EC2_SSH_KEY:
+        description: "EC2 SSH private key"
+        required: true
+      EC2_USER:
+        description: "EC2 SSH user"
+        required: true
+      AWS_ACCESS_KEY_ID:
+        description: "AWS Access Key ID"
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS Secret Access Key"
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.env_name }} via Ansible
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible and AWS CLI
+        run: |
+          pip install ansible boto3 botocore
+          sudo apt-get update && sudo apt-get install -y awscli
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Run Ansible Playbook
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: "us-east-1"
+        run: |
+          ansible-playbook -i "${{ secrets.EC2_HOST }}," \
+            infra/ansible/deploy.yml \
+            -e "env_name=${{ inputs.env_name }}" \
+            --user ${{ secrets.EC2_USER }} \
+            --private-key ~/.ssh/id_rsa \
+            --ssh-common-args='-o StrictHostKeyChecking=no'

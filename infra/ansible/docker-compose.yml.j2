@@ -1,0 +1,96 @@
+version: '3.8'
+
+name: condensation
+
+services:
+  auth:
+    image: "{{ ecr_auth_url }}:latest"
+    restart: on-failure
+    ports:
+      - "8000:80"
+    environment:
+      - APP_NAME=Laravel
+      - APP_ENV=production
+      - APP_KEY={{ auth_app_key | default('// TO COMPLETE') }}
+      - APP_DEBUG=false
+      - APP_URL={{ auth_app_url | default('// TO COMPLETE') }}
+      - DB_CONNECTION=pgsql
+      - DB_HOST={{ db_endpoint }}
+      - DB_PORT={{ db_port }}
+      - DB_DATABASE={{ auth_db_name }}
+      - DB_USERNAME={{ db_username }}
+      - DB_PASSWORD={{ db_password }}
+      - CLIENT_ID={{ auth_client_id | default('// TO COMPLETE') }}
+      - CACHE_STORE=database
+      - SESSION_DRIVER=database
+      - QUEUE_CONNECTION=database
+    depends_on:
+      - redis // TO COMPLETE (if used in prod)
+    volumes:
+      - auth_keys:/var/www/html/storage
+
+  frontend:
+    image: "{{ ecr_frontend_url }}:latest"
+    ports:
+      - "80:3000"
+    environment:
+      - AUTH_URL={{ auth_external_url | default('// TO COMPLETE') }}
+      - API_URL=http://auth:80
+      - BACKEND_URL=http://backend:8080
+      - CLIENT_ID={{ auth_client_id | default('// TO COMPLETE') }}
+      - REDIRECT_URI={{ frontend_redirect_uri | default('// TO COMPLETE') }}
+      - NODE_ENV=production
+      - INTERNAL_SECRET={{ internal_secret | default('// TO COMPLETE') }}
+      - STRIPE_SECRET_KEY={{ stripe_secret_key | default('// TO COMPLETE') }}
+      - STRIPE_WEBHOOK_SECRET={{ stripe_webhook_secret | default('// TO COMPLETE') }}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={{ stripe_publishable_key | default('// TO COMPLETE') }}
+    depends_on:
+      - auth
+      - backend
+
+  backend:
+    image: "{{ ecr_backend_url }}:latest"
+    hostname: backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://{{ db_endpoint }}:{{ db_port }}/{{ game_db_name }}
+      - SPRING_DATASOURCE_USERNAME={{ db_username }}
+      - SPRING_DATASOURCE_PASSWORD={{ db_password }}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - AUTH_URL=http://auth:80
+      - INTERNAL_SECRET={{ internal_secret | default('// TO COMPLETE') }}
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_BASE_PATH=/actuator
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:9.5.8
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user | default('admin') }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password | default('// TO COMPLETE') }}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  auth_keys:
+  prometheus_data:
+  grafana_data:

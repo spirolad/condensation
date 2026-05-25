@@ -1,0 +1,148 @@
+---
+# ==============================================================================
+# PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)
+# ==============================================================================
+- name: Fetch Secrets and Config from AWS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    aws_region: "us-east-1"
+    env_name: "{{ env_name }}"
+  tasks:
+    # 1. Récupérer l'ARN du secret RDS
+    - name: Get RDS Secret ARN from SSM Parameter Store
+      command: >
+        aws ssm get-parameter 
+        --name "/{{ env_name }}/rds_db_secret" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: db_secret_arn_output
+      changed_when: false
+
+    # 2. Utiliser l'ARN pour lire le secret réel
+    - name: Get RDS Secret Credentials using ARN
+      command: >
+        aws secretsmanager get-secret-value 
+        --secret-id "{{ db_secret_arn_output.stdout }}" 
+        --query 'SecretString' --output text --region {{ aws_region }}
+      register: rds_secret_raw
+      changed_when: false
+
+    # 3. Transformer le JSON récupéré en variables utilisables
+    - name: Parse RDS Secret JSON
+      set_fact:
+        db_creds: "{{ rds_secret_raw.stdout | from_json }}"
+
+    # 4. Récupérer l'endpoint (URL) de la BDD
+    - name: Get RDS Endpoint from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/rds_endpoint" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: rds_endpoint_raw
+      changed_when: false
+
+    # 5. Récupérer le nom de la BDD pour Auth
+    - name: Get Auth DB Name from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/auth_database_name" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: auth_dbname_raw
+      changed_when: false
+
+    # 6. Récupérer le nom de la BDD pour Game/Catalog
+    - name: Get Game DB Name from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/game_database_name" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: game_dbname_raw
+      changed_when: false
+
+# ==============================================================================
+# PLAY 2 : Installation et Déploiement sur l'instance EC2
+# ==============================================================================
+- name: Configure EC2 and Deploy Application
+  hosts: all
+  remote_user: ec2-user
+  become: yes
+  vars:
+    ec2_public_ip: "{{ ansible_host }}"
+    # Récupération des variables collectées dans le Play 1
+    db_username: "{{ hostvars['localhost']['db_creds']['username'] }}"
+    db_password: "{{ hostvars['localhost']['db_creds']['password'] }}"
+    db_endpoint: "{{ hostvars['localhost']['rds_endpoint_raw']['stdout'] }}"
+    auth_db_name: "{{ hostvars['localhost']['auth_dbname_raw']['stdout'] }}"
+    game_db_name: "{{ hostvars['localhost']['game_dbname_raw']['stdout'] }}"
+    db_port:     "5432"
+    
+    aws_region: "us-east-1"
+    ecr_repo_domain: "// TO COMPLETE"
+    
+    # Construction des URLs ECR
+    ecr_frontend_url: "{{ ecr_repo_domain }}/{{ env_name }}-frontend"
+    ecr_backend_url:  "{{ ecr_repo_domain }}/{{ env_name }}-backend"
+    ecr_auth_url:     "{{ ecr_repo_domain }}/{{ env_name }}-auth"
+
+  tasks:
+    # --- INSTALLATION DES DÉPENDANCES ---
+    
+    - name: Update system packages
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+
+    - name: Install Docker, Git and AWS CLI
+      yum:
+        name:
+          - docker
+          - git
+          - awscli 
+        state: present
+
+    - name: Start and Enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Install Docker Compose (Standalone Binary)
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    # --- DÉPLOIEMENT DE L'APPLICATION ---
+
+    - name: Create application directory
+      file:
+        path: /home/ec2-user/app
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    - name: Generate docker-compose.yml from template
+      template:
+        src: docker-compose.yml.j2
+        dest: /home/ec2-user/app/docker-compose.yml
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+
+    - name: Login to ECR on the EC2 instance
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_repo_domain }}
+
+    - name: Deploy containers (Down, Pull, Up)
+      shell: |
+        /usr/local/bin/docker-compose down --remove-orphans
+        /usr/local/bin/docker-compose pull
+        /usr/local/bin/docker-compose up -d
+      args:
+        chdir: /home/ec2-user/app
