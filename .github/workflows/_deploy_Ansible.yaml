@@ -8,21 +8,26 @@ on:
         required: true
         type: string
     secrets:
-      EC2_HOST:
-        description: "EC2 SSH host"
-        required: true
-      EC2_SSH_KEY:
-        description: "EC2 SSH private key"
-        required: true
-      EC2_USER:
-        description: "EC2 SSH user"
-        required: true
       AWS_ACCESS_KEY_ID:
         description: "AWS Access Key ID"
         required: true
       AWS_SECRET_ACCESS_KEY:
         description: "AWS Secret Access Key"
         required: true
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+      ec2_ssh_user:
+        description: "SSH user for the EC2 instance"
+        required: false
+        default: "ec2-user"
 
 jobs:
   deploy:
@@ -38,26 +43,67 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Ansible and AWS CLI
+      - name: Install dependencies
         run: |
-          pip install ansible boto3 botocore
-          sudo apt-get update && sudo apt-get install -y awscli
+          sudo apt-get update
+          sudo apt-get install -y awscli
+          python -m pip install --upgrade pip
+          python -m pip install ansible boto3 botocore
 
-      - name: Setup SSH Key
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.6.7'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Terraform init
+        working-directory: aws
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: aws
+        run: |
+          terraform apply -auto-approve \
+            -var="environment=${{ inputs.env_name }}" \
+            -var="aws_region=${{ inputs.aws_region }}"
+
+      - name: Get Terraform outputs
+        id: tf_outputs
+        working-directory: aws
+        run: |
+          terraform output -json > /tmp/tf_outputs.json
+          echo "public_ip=$(python - <<'PY'
+          import json
+          output=json.load(open('/tmp/tf_outputs.json'))
+          print(output['ec2_instance_public_ip']['value'])
+          PY)" >> $GITHUB_OUTPUT
+          echo "secret_name=$(python - <<'PY'
+          import json
+          output=json.load(open('/tmp/tf_outputs.json'))
+          print(output['ec2_secret_key_name']['value'])
+          PY)" >> $GITHUB_OUTPUT
+
+      - name: Retrieve EC2 private key from Secrets Manager
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          aws secretsmanager get-secret-value --secret-id "${{ steps.tf_outputs.outputs.secret_name }}" --query 'SecretString' --output text > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
       - name: Run Ansible Playbook
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: "us-east-1"
+          AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
         run: |
-          ansible-playbook -i "${{ secrets.EC2_HOST }}," \
+          ansible-playbook -i "${{ steps.tf_outputs.outputs.public_ip }}," \
             infra/ansible/deploy.yml \
             -e "env_name=${{ inputs.env_name }}" \
-            --user ${{ secrets.EC2_USER }} \
+            --user "${{ inputs.ec2_ssh_user }}" \
             --private-key ~/.ssh/id_rsa \
             --ssh-common-args='-o StrictHostKeyChecking=no'
