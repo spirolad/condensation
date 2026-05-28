@@ -54,14 +54,21 @@ jobs:
         with:
           terraform_version: '1.9.8'
 
-      - name: Export AWS credentials
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "AWS_DEFAULT_REGION=${{ inputs.aws_region }}" >> $GITHUB_ENV
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
 
-      - name: Validate AWS credentials
-        run: aws sts get-caller-identity
+      - name: Validate AWS credential environment
+        run: |
+          echo "AWS_ACCESS_KEY_ID set: ${AWS_ACCESS_KEY_ID:+yes}"
+          echo "AWS_SECRET_ACCESS_KEY set: ${AWS_SECRET_ACCESS_KEY:+yes}"
+          echo "AWS_SESSION_TOKEN set: ${AWS_SESSION_TOKEN:+yes}"
+          aws configure list
+          aws sts get-caller-identity
 
       - name: Terraform init
         working-directory: aws
