@@ -74,12 +74,14 @@ jobs:
         working-directory: aws
         run: terraform init
 
+        
+      - name: Terraform plan
+        working-directory: aws
+        run: terraform plan -var-file="environnement/prd.tfvars"
+        
       - name: Terraform apply
         working-directory: aws
-        run: |
-          terraform apply -auto-approve \
-            -var="environment=${{ inputs.env_name }}" \
-            -var="aws_region=${{ inputs.aws_region }}"
+        run: terraform plan -auto-approve -var-file="environnement/prd.tfvars"
 
       - name: Get Terraform outputs
         id: tf_outputs
