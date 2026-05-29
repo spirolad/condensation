@@ -81,7 +81,7 @@ jobs:
         
       - name: Terraform apply
         working-directory: aws
-        run: terraform plan -auto-approve -var-file="environnement/prd.tfvars"
+        run: terraform apply -auto-approve -var-file="environnement/prd.tfvars"
 
       - name: Get Terraform outputs
         id: tf_outputs
