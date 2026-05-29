@@ -15,7 +15,7 @@ terraform init
 
 3 apply 
 
-terraform plan -auto-approve -var-file="environnement/prd.tfvars"
+terraform apply -auto-approve -var-file="environnement/prd.tfvars"
 
 4 destroy 
 
