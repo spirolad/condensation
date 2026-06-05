@@ -7,6 +7,16 @@ on:
         description: "Environment name (e.g. dev, prod)"
         required: true
         type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+        type: string
+      ec2_ssh_user:
+        description: "SSH user for the EC2 instance"
+        required: false
+        default: "ec2-user"
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         description: "AWS Access Key ID"
@@ -30,8 +40,8 @@ on:
         default: "ec2-user"
 
 jobs:
-  deploy:
-    name: Deploy to ${{ inputs.env_name }} via Ansible
+  deploy_ansible:
+    name: Deploy Application with Ansible
     runs-on: ubuntu-latest
 
     steps:
@@ -49,11 +59,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install awscli ansible boto3 botocore
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: '1.9.8'
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
@@ -62,87 +67,19 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Validate AWS credential environment
+      - name: Retrieve EC2 configuration from SSM Parameter Store
+        id: ec2_config
         run: |
-          echo "AWS_ACCESS_KEY_ID set: ${AWS_ACCESS_KEY_ID:+yes}"
-          echo "AWS_SECRET_ACCESS_KEY set: ${AWS_SECRET_ACCESS_KEY:+yes}"
-          echo "AWS_SESSION_TOKEN set: ${AWS_SESSION_TOKEN:+yes}"
-          aws configure list
-          aws sts get-caller-identity
-
-      - name: Terraform init
-        working-directory: aws
-        run: terraform init
-
-        
-      - name: Terraform plan
-        working-directory: aws
-        run: terraform plan -var-file="environnement/${{ inputs.env_name }}.tfvars"
-
-      - name: Check existing AWS resources
-        continue-on-error: true
-        run: |
-          echo "=========================================="
-          echo "Checking for existing AWS resources (env: ${{ inputs.env_name }})"
-          echo "=========================================="
+          EC2_PUBLIC_IP=$(aws ssm get-parameter --name "/${{ inputs.env_name }}/ec2_public_ip" --query 'Parameter.Value' --output text --region ${{ inputs.aws_region }})
+          EC2_SECRET_NAME=$(aws ssm get-parameter --name "/${{ inputs.env_name }}/ec2_secret_key_name" --query 'Parameter.Value' --output text --region ${{ inputs.aws_region }})
           
-          ENV="${{ inputs.env_name }}"
-          
-          echo ""
-          echo "=== RDS Subnet Groups ==="
-          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-${ENV}-subnet-group']" --output table 2>/dev/null || echo "❌ app-${ENV}-subnet-group not found"
-          
-          echo ""
-          echo "=== ECR Repositories ==="
-          aws ecr describe-repositories --repository-names ${ENV}-frontend 2>/dev/null && echo "✅ ${ENV}-frontend found" || echo "❌ ${ENV}-frontend not found"
-          aws ecr describe-repositories --repository-names ${ENV}-backend 2>/dev/null && echo "✅ ${ENV}-backend found" || echo "❌ ${ENV}-backend not found"
-          aws ecr describe-repositories --repository-names ${ENV}-auth 2>/dev/null && echo "✅ ${ENV}-auth found" || echo "❌ ${ENV}-auth not found"
-          
-          echo ""
-          echo "=== Secrets Manager ==="
-          aws secretsmanager describe-secret --secret-id ${ENV}-app-secretkey 2>/dev/null && echo "✅ ${ENV}-app-secretkey found" || echo "❌ ${ENV}-app-secretkey not found"
-          
-          echo ""
-          echo "=== EC2 Key Pairs ==="
-          aws ec2 describe-key-pairs --key-names ${ENV}-ec2-key 2>/dev/null && echo "✅ ${ENV}-ec2-key found" || echo "❌ ${ENV}-ec2-key not found"
-          
-          echo ""
-          echo "=== Security Groups ==="
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=${ENV}-ec2-sg" 2>/dev/null && echo "✅ ${ENV}-ec2-sg found" || echo "❌ ${ENV}-ec2-sg not found"
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-${ENV}-rds-sg" 2>/dev/null && echo "✅ app-${ENV}-rds-sg found" || echo "❌ app-${ENV}-rds-sg not found"
-          
-          echo ""
-          echo "=== SSM Parameters ==="
-          aws ssm get-parameter --name "/${ENV}/rds_db_secret" 2>/dev/null && echo "✅ /${ENV}/rds_db_secret found" || echo "❌ /${ENV}/rds_db_secret not found"
-          aws ssm get-parameter --name "/${ENV}/rds_endpoint" 2>/dev/null && echo "✅ /${ENV}/rds_endpoint found" || echo "❌ /${ENV}/rds_endpoint not found"
-          
-          echo ""
-          echo "=========================================="
-        
-      - name: Terraform apply
-        working-directory: aws
-        run: terraform apply -auto-approve -var-file="environnement/${{ inputs.env_name }}.tfvars"
-
-      - name: Get Terraform outputs
-        id: tf_outputs
-        working-directory: aws
-        run: |
-          terraform output -json > /tmp/tf_outputs.json
-          echo "public_ip=$(python - <<'PY'
-          import json
-          output=json.load(open('/tmp/tf_outputs.json'))
-          print(output['ec2_instance_public_ip']['value'])
-          PY)" >> $GITHUB_OUTPUT
-          echo "secret_name=$(python - <<'PY'
-          import json
-          output=json.load(open('/tmp/tf_outputs.json'))
-          print(output['ec2_secret_key_name']['value'])
-          PY)" >> $GITHUB_OUTPUT
+          echo "public_ip=${EC2_PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "secret_name=${EC2_SECRET_NAME}" >> $GITHUB_OUTPUT
 
       - name: Retrieve EC2 private key from Secrets Manager
         run: |
           mkdir -p ~/.ssh
-          aws secretsmanager get-secret-value --secret-id "${{ steps.tf_outputs.outputs.secret_name }}" --query 'SecretString' --output text > ~/.ssh/id_rsa
+          aws secretsmanager get-secret-value --secret-id "${{ steps.ec2_config.outputs.secret_name }}" --query 'SecretString' --output text > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
       - name: Run Ansible Playbook
@@ -151,9 +88,12 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
         run: |
-          ansible-playbook -i "${{ steps.tf_outputs.outputs.public_ip }}," \
+          ansible-playbook -i "${{ steps.ec2_config.outputs.public_ip }}," \
             infra/ansible/deploy.yml \
             -e "env_name=${{ inputs.env_name }}" \
             --user "${{ inputs.ec2_ssh_user }}" \
             --private-key ~/.ssh/id_rsa \
             --ssh-common-args='-o StrictHostKeyChecking=no'
+
+
+

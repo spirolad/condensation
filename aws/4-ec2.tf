@@ -115,3 +115,15 @@ resource "aws_ssm_parameter" "ec2_secret_key_name" {
     Name = "${var.environment}-ec2-secret-key-name"
   }
 }
+
+# SSM Parameter for EC2 public IP
+resource "aws_ssm_parameter" "ec2_public_ip" {
+  name  = "/${var.environment}/ec2_public_ip"
+  type  = "String"
+  value = aws_instance.app.public_ip
+
+  tags = {
+    Name = "${var.environment}-ec2-public-ip"
+  }
+}
+
