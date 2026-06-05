@@ -77,46 +77,51 @@ jobs:
         
       - name: Terraform plan
         working-directory: aws
-        run: terraform plan -var-file="environnement/prd.tfvars"
+        run: terraform plan -var-file="environnement/${{ inputs.env_name }}.tfvars"
 
       - name: Check existing AWS resources
         continue-on-error: true
         run: |
           echo "=========================================="
-          echo "Checking for existing AWS resources..."
+          echo "Checking for existing AWS resources (env: ${{ inputs.env_name }})"
           echo "=========================================="
+          
+          ENV="${{ inputs.env_name }}"
           
           echo ""
           echo "=== RDS Subnet Groups ==="
-          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-prd-subnet-group']" --output table 2>/dev/null || echo "❌ app-prd-subnet-group not found"
-          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-prd-sbnet-group']" --output table 2>/dev/null || echo "❌ app-prd-sbnet-group not found"
+          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-${ENV}-subnet-group']" --output table 2>/dev/null || echo "❌ app-${ENV}-subnet-group not found"
           
           echo ""
           echo "=== ECR Repositories ==="
-          aws ecr describe-repositories --repository-names prd-frontend 2>/dev/null && echo "✅ prd-frontend found" || echo "❌ prd-frontend not found"
-          aws ecr describe-repositories --repository-names prd-backend 2>/dev/null && echo "✅ prd-backend found" || echo "❌ prd-backend not found"
-          aws ecr describe-repositories --repository-names prd-auth 2>/dev/null && echo "✅ prd-auth found" || echo "❌ prd-auth not found"
+          aws ecr describe-repositories --repository-names ${ENV}-frontend 2>/dev/null && echo "✅ ${ENV}-frontend found" || echo "❌ ${ENV}-frontend not found"
+          aws ecr describe-repositories --repository-names ${ENV}-backend 2>/dev/null && echo "✅ ${ENV}-backend found" || echo "❌ ${ENV}-backend not found"
+          aws ecr describe-repositories --repository-names ${ENV}-auth 2>/dev/null && echo "✅ ${ENV}-auth found" || echo "❌ ${ENV}-auth not found"
           
           echo ""
           echo "=== Secrets Manager ==="
-          aws secretsmanager describe-secret --secret-id prd-app-secretkey 2>/dev/null && echo "✅ prd-app-secretkey found" || echo "❌ prd-app-secretkey not found"
+          aws secretsmanager describe-secret --secret-id ${ENV}-app-secretkey 2>/dev/null && echo "✅ ${ENV}-app-secretkey found" || echo "❌ ${ENV}-app-secretkey not found"
           
           echo ""
           echo "=== EC2 Key Pairs ==="
-          aws ec2 describe-key-pairs --key-names prd-ec2-key 2>/dev/null && echo "✅ prd-ec2-key found" || echo "❌ prd-ec2-key not found"
+          aws ec2 describe-key-pairs --key-names ${ENV}-ec2-key 2>/dev/null && echo "✅ ${ENV}-ec2-key found" || echo "❌ ${ENV}-ec2-key not found"
           
           echo ""
           echo "=== Security Groups ==="
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=prd-ec2-sg" 2>/dev/null && echo "✅ prd-ec2-sg found" || echo "❌ prd-ec2-sg not found"
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-prd-rds-sg" 2>/dev/null && echo "✅ app-prd-rds-sg found" || echo "❌ app-prd-rds-sg not found"
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-prd-rds-game-sg" 2>/dev/null && echo "✅ app-prd-rds-game-sg found" || echo "❌ app-prd-rds-game-sg not found"
+          aws ec2 describe-security-groups --filters "Name=group-name,Values=${ENV}-ec2-sg" 2>/dev/null && echo "✅ ${ENV}-ec2-sg found" || echo "❌ ${ENV}-ec2-sg not found"
+          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-${ENV}-rds-sg" 2>/dev/null && echo "✅ app-${ENV}-rds-sg found" || echo "❌ app-${ENV}-rds-sg not found"
+          
+          echo ""
+          echo "=== SSM Parameters ==="
+          aws ssm get-parameter --name "/${ENV}/rds_db_secret" 2>/dev/null && echo "✅ /${ENV}/rds_db_secret found" || echo "❌ /${ENV}/rds_db_secret not found"
+          aws ssm get-parameter --name "/${ENV}/rds_endpoint" 2>/dev/null && echo "✅ /${ENV}/rds_endpoint found" || echo "❌ /${ENV}/rds_endpoint not found"
           
           echo ""
           echo "=========================================="
         
       - name: Terraform apply
         working-directory: aws
-        run: terraform apply -auto-approve -var-file="environnement/prd.tfvars"
+        run: terraform apply -auto-approve -var-file="environnement/${{ inputs.env_name }}.tfvars"
 
       - name: Get Terraform outputs
         id: tf_outputs
