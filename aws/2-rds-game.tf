@@ -91,7 +91,7 @@ resource "aws_ssm_parameter" "db_game_secret" {
 resource "aws_ssm_parameter" "rds_game_endpoint" {
   name  = "/${var.environment}/rds_game_endpoint"
   type  = "String"
-  value = aws_db_instance.postgres.address
+  value = aws_db_instance.postgres_game.address
 
   tags = {
     Name = "${var.environment}-rds-game-endpoint"
@@ -101,7 +101,7 @@ resource "aws_ssm_parameter" "rds_game_endpoint" {
 resource "aws_ssm_parameter" "rds_game_port" {
   name  = "/${var.environment}/rds_game_port"
   type  = "String"
-  value = tostring(aws_db_instance.postgres.port)
+  value = tostring(aws_db_instance.postgres_game.port)
 
   tags = {
     Name = "${var.environment}-rds-game-port"
@@ -115,6 +115,17 @@ resource "aws_ssm_parameter" "rds_database_game_name" {
 
   tags = {
     Name = "${var.environment}-rds-database-game-name"
+  }
+}
+
+# Alias for Ansible compatibility (Game database)
+resource "aws_ssm_parameter" "game_database_name" {
+  name  = "/${var.environment}/game_database_name"
+  type  = "String"
+  value = aws_db_instance.postgres_game.db_name
+
+  tags = {
+    Name = "${var.environment}-game-database-name"
   }
 }
 

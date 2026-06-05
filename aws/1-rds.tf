@@ -118,3 +118,14 @@ resource "aws_ssm_parameter" "rds_database_name" {
   }
 }
 
+# Alias for Ansible compatibility (Auth database)
+resource "aws_ssm_parameter" "auth_database_name" {
+  name  = "/${var.environment}/auth_database_name"
+  type  = "String"
+  value = aws_db_instance.postgres.db_name
+
+  tags = {
+    Name = "${var.environment}-auth-database-name"
+  }
+}
+
