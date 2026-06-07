@@ -186,9 +186,7 @@
             - ""
 
       when: build_images
-
-      skip_ansible_lint:
-      - skip_ansible_lint
+    - skip_ansible_lint
 
 # ==============================================================================
 # PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)
