@@ -107,3 +107,45 @@ output "ssm_db_parameter_name" {
   description = "Name of the SSM parameter for RDS secret ARN"
   value       = aws_ssm_parameter.db_secret.name
 }
+
+# EC2 SSM Parameters
+output "ssm_ec2_instance_id" {
+  description = "SSM Parameter name for EC2 instance ID"
+  value       = aws_ssm_parameter.ec2_instance_id.name
+}
+
+output "ssm_ec2_public_ip" {
+  description = "SSM Parameter name for EC2 public IP"
+  value       = aws_ssm_parameter.ec2_public_ip.name
+}
+
+output "ssm_ec2_private_ip" {
+  description = "SSM Parameter name for EC2 private IP"
+  value       = aws_ssm_parameter.ec2_private_ip.name
+}
+
+output "ssm_ec2_secret_key_name" {
+  description = "SSM Parameter name for EC2 secret key name"
+  value       = aws_ssm_parameter.ec2_secret_key_name.name
+}
+
+output "ssm_ec2_key_pair_name" {
+  description = "SSM Parameter name for EC2 key pair name"
+  value       = aws_ssm_parameter.ec2_key_pair_name.name
+}
+
+# ECR URLs SSM Parameters
+output "ssm_ecr_frontend_url" {
+  description = "SSM Parameter name for ECR Frontend URL"
+  value       = aws_ssm_parameter.ecr_frontend_url.name
+}
+
+output "ssm_ecr_backend_url" {
+  description = "SSM Parameter name for ECR Backend URL"
+  value       = aws_ssm_parameter.ecr_backend_url.name
+}
+
+output "ssm_ecr_auth_url" {
+  description = "SSM Parameter name for ECR Auth URL"
+  value       = aws_ssm_parameter.ecr_auth_url.name
+}

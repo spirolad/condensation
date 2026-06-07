@@ -57,6 +57,68 @@
       register: game_dbname_raw
       changed_when: false
 
+    # 7. Récupérer l'Instance ID EC2 depuis SSM
+    - name: Get EC2 Instance ID from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ec2_instance_id" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ec2_instance_id_raw
+      changed_when: false
+
+    # 8. Récupérer l'IP publique EC2 depuis SSM
+    - name: Get EC2 Public IP from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ec2_public_ip" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ec2_public_ip_raw
+      changed_when: false
+
+    # 9. Récupérer l'IP privée EC2 depuis SSM
+    - name: Get EC2 Private IP from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ec2_private_ip" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ec2_private_ip_raw
+      changed_when: false
+
+    # 10. Récupérer le nom de la clé SSH depuis SSM
+    - name: Get EC2 Key Pair Name from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ec2_key_pair_name" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ec2_key_pair_name_raw
+      changed_when: false
+
+    # 11. Récupérer le nom du secret de clé privée depuis SSM
+    - name: Get EC2 Secret Key Name from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ec2_secret_key_name" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ec2_secret_key_name_raw
+      changed_when: false
+
+    # 12. Récupérer les URLs ECR depuis SSM
+    - name: Get ECR Frontend URL from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ecr_frontend_url" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ecr_frontend_url_raw
+      changed_when: false
+
+    - name: Get ECR Backend URL from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ecr_backend_url" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ecr_backend_url_raw
+      changed_when: false
+
+    - name: Get ECR Auth URL from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/ecr_auth_url" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: ecr_auth_url_raw
+      changed_when: false
+
 # ==============================================================================
 # PLAY 2 : Installation et Déploiement sur l'instance EC2
 # ==============================================================================
@@ -65,7 +127,6 @@
   remote_user: ec2-user
   become: yes
   vars:
-    ec2_public_ip: "{{ ansible_host }}"
     # Récupération des variables collectées dans le Play 1
     db_username: "{{ hostvars['localhost']['db_creds']['username'] }}"
     db_password: "{{ hostvars['localhost']['db_creds']['password'] }}"
@@ -74,17 +135,38 @@
     game_db_name: "{{ hostvars['localhost']['game_dbname_raw']['stdout'] }}"
     db_port:     "5432"
     
-    aws_region: "us-east-1"
-    ecr_repo_domain: "// TO COMPLETE"
+    # Paramètres EC2 depuis SSM
+    ec2_instance_id: "{{ hostvars['localhost']['ec2_instance_id_raw']['stdout'] }}"
+    ec2_public_ip: "{{ hostvars['localhost']['ec2_public_ip_raw']['stdout'] }}"
+    ec2_private_ip: "{{ hostvars['localhost']['ec2_private_ip_raw']['stdout'] }}"
+    ec2_key_pair_name: "{{ hostvars['localhost']['ec2_key_pair_name_raw']['stdout'] }}"
+    ec2_secret_key_name: "{{ hostvars['localhost']['ec2_secret_key_name_raw']['stdout'] }}"
     
-    # Construction des URLs ECR
-    ecr_frontend_url: "{{ ecr_repo_domain }}/{{ env_name }}-frontend"
-    ecr_backend_url:  "{{ ecr_repo_domain }}/{{ env_name }}-backend"
-    ecr_auth_url:     "{{ ecr_repo_domain }}/{{ env_name }}-auth"
+    aws_region: "us-east-1"
+    
+    # URLs ECR depuis SSM
+    ecr_frontend_url: "{{ hostvars['localhost']['ecr_frontend_url_raw']['stdout'] }}"
+    ecr_backend_url: "{{ hostvars['localhost']['ecr_backend_url_raw']['stdout'] }}"
+    ecr_auth_url: "{{ hostvars['localhost']['ecr_auth_url_raw']['stdout'] }}"
 
   tasks:
     # --- INSTALLATION DES DÉPENDANCES ---
     
+    - name: Display EC2 and Database Information
+      debug:
+        msg:
+          - "EC2 Instance ID: {{ ec2_instance_id }}"
+          - "EC2 Public IP: {{ ec2_public_ip }}"
+          - "EC2 Private IP: {{ ec2_private_ip }}"
+          - "EC2 Key Pair: {{ ec2_key_pair_name }}"
+          - "DB Endpoint: {{ db_endpoint }}"
+          - "DB Port: {{ db_port }}"
+          - "Auth DB: {{ auth_db_name }}"
+          - "Game DB: {{ game_db_name }}"
+          - "ECR Frontend: {{ ecr_frontend_url }}"
+          - "ECR Backend: {{ ecr_backend_url }}"
+          - "ECR Auth: {{ ecr_auth_url }}"
+
     - name: Update system packages
       yum:
         name: "*"
@@ -137,7 +219,8 @@
 
     - name: Login to ECR on the EC2 instance
       shell: |
-        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_repo_domain }}
+        ECR_DOMAIN=$(echo "{{ ecr_frontend_url }}" | cut -d'/' -f1)
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin $ECR_DOMAIN
 
     - name: Deploy containers (Down, Pull, Up)
       shell: |

@@ -24,8 +24,6 @@ services:
       - CACHE_STORE=database
       - SESSION_DRIVER=database
       - QUEUE_CONNECTION=database
-    depends_on:
-      - redis // TO COMPLETE (if used in prod)
     volumes:
       - auth_keys:/var/www/html/storage
 

@@ -106,15 +106,17 @@ resource "aws_instance" "app" {
   }
 }
 
-# SSM Parameter for EC2 secret key name
-resource "aws_ssm_parameter" "ec2_secret_key_name" {
-  name  = "/${var.environment}/ec2_secret_key_name"
+# SSM Parameter for EC2 Instance ID
+resource "aws_ssm_parameter" "ec2_instance_id" {
+  name  = "/${var.environment}/ec2_instance_id"
   type  = "String"
-  value = aws_secretsmanager_secret.application_key.name
+  value = aws_instance.app.id
 
   tags = {
-    Name = "${var.environment}-ec2-secret-key-name"
+    Name = "${var.environment}-ec2-instance-id"
   }
+
+  depends_on = [aws_instance.app]
 }
 
 # SSM Parameter for EC2 public IP
@@ -126,5 +128,85 @@ resource "aws_ssm_parameter" "ec2_public_ip" {
   tags = {
     Name = "${var.environment}-ec2-public-ip"
   }
+
+  depends_on = [aws_instance.app]
+}
+
+# SSM Parameter for EC2 secret key name
+resource "aws_ssm_parameter" "ec2_secret_key_name" {
+  name  = "/${var.environment}/ec2_secret_key_name"
+  type  = "String"
+  value = aws_secretsmanager_secret.application_key.name
+
+  tags = {
+    Name = "${var.environment}-ec2-secret-key-name"
+  }
+
+  depends_on = [aws_instance.app]
+}
+
+# SSM Parameter for EC2 key pair name
+resource "aws_ssm_parameter" "ec2_key_pair_name" {
+  name  = "/${var.environment}/ec2_key_pair_name"
+  type  = "String"
+  value = aws_key_pair.ec2_key.key_name
+
+  tags = {
+    Name = "${var.environment}-ec2-key-pair-name"
+  }
+
+  depends_on = [aws_instance.app]
+}
+
+# SSM Parameter for EC2 private IP
+resource "aws_ssm_parameter" "ec2_private_ip" {
+  name  = "/${var.environment}/ec2_private_ip"
+  type  = "String"
+  value = aws_instance.app.private_ip
+
+  tags = {
+    Name = "${var.environment}-ec2-private-ip"
+  }
+
+  depends_on = [aws_instance.app]
+}
+
+# SSM Parameter for ECR Frontend URL
+resource "aws_ssm_parameter" "ecr_frontend_url" {
+  name  = "/${var.environment}/ecr_frontend_url"
+  type  = "String"
+  value = aws_ecr_repository.frontend.repository_url
+
+  tags = {
+    Name = "${var.environment}-ecr-frontend-url"
+  }
+
+  depends_on = [aws_ecr_repository.frontend]
+}
+
+# SSM Parameter for ECR Backend URL
+resource "aws_ssm_parameter" "ecr_backend_url" {
+  name  = "/${var.environment}/ecr_backend_url"
+  type  = "String"
+  value = aws_ecr_repository.backend.repository_url
+
+  tags = {
+    Name = "${var.environment}-ecr-backend-url"
+  }
+
+  depends_on = [aws_ecr_repository.backend]
+}
+
+# SSM Parameter for ECR Auth URL
+resource "aws_ssm_parameter" "ecr_auth_url" {
+  name  = "/${var.environment}/ecr_auth_url"
+  type  = "String"
+  value = aws_ecr_repository.auth.repository_url
+
+  tags = {
+    Name = "${var.environment}-ecr-auth-url"
+  }
+
+  depends_on = [aws_ecr_repository.auth]
 }
 
