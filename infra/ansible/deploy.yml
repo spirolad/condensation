@@ -1,5 +1,196 @@
 ---
 # ==============================================================================
+# PLAY 0 : Build and Push Docker Images to ECR
+# ==============================================================================
+- name: Build and Push Docker Images to ECR
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  vars:
+    aws_region: "us-east-1"
+    env_name: "{{ env_name }}"
+    build_images: "{{ build_images | default(false) }}"
+  tasks:
+    - name: Prompt user to build Docker images
+      pause:
+        prompt: |
+          
+          ╔════════════════════════════════════════════════════════════╗
+          ║        Build and Push Docker Images to ECR?                ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          This will build and push Docker images for:
+            • Frontend (./frontend)
+            • Backend (./backend)
+            • Auth (./authentication)
+          
+          Build duration: ~5-15 minutes (depends on image size)
+          
+          Do you want to continue? (yes/no)
+        echo: yes
+      register: user_build_choice
+      when: not build_images
+
+    - name: Set build_images fact based on user input
+      set_fact:
+        build_images: true
+      when: 
+        - not build_images
+        - user_build_choice.user_input | lower == 'yes'
+
+    - name: Display skip message
+      debug:
+        msg: "⏭️  Skipping Docker image build. Using existing images in ECR."
+      when: not build_images
+
+    - block:
+      - name: Get AWS Account ID
+        command: aws sts get-caller-identity --query Account --output text
+        register: aws_account_output
+        changed_when: false
+
+      - name: Set ECR variables
+        set_fact:
+          aws_account_id: "{{ aws_account_output.stdout }}"
+          ecr_domain: "{{ aws_account_output.stdout }}.dkr.ecr.{{ aws_region }}.amazonaws.com"
+
+      - name: Display ECR information
+        debug:
+          msg:
+            - "AWS Account ID: {{ aws_account_id }}"
+            - "ECR Domain: {{ ecr_domain }}"
+            - "Environment: {{ env_name }}"
+
+      - name: Login to AWS ECR
+        shell: |
+          aws ecr get-login-password --region {{ aws_region }} | \
+          docker login --username AWS --password-stdin {{ ecr_domain }}
+        register: ecr_login
+        changed_when: false
+        no_log: true
+
+      - name: Confirm ECR login
+        debug:
+          msg: "✓ Successfully logged in to ECR"
+
+      - name: Get repository root path
+        command: git rev-parse --show-toplevel
+        register: repo_root_output
+        changed_when: false
+
+      - name: Set repository root
+        set_fact:
+          repo_root: "{{ repo_root_output.stdout }}"
+
+      - name: Display build plan
+        debug:
+          msg:
+            - "════════════════════════════════════════════════════════════"
+            - "Building Docker Images for {{ env_name }} environment"
+            - "════════════════════════════════════════════════════════════"
+            - ""
+            - "Frontend:"
+            - "  Source: {{ repo_root }}/frontend"
+            - "  Target: {{ ecr_domain }}/{{ env_name }}-frontend:latest"
+            - ""
+            - "Backend:"
+            - "  Source: {{ repo_root }}/backend"
+            - "  Target: {{ ecr_domain }}/{{ env_name }}-backend:latest"
+            - ""
+            - "Auth:"
+            - "  Source: {{ repo_root }}/authentication"
+            - "  Target: {{ ecr_domain }}/{{ env_name }}-auth:latest"
+
+      # =====================================================================
+      # Build and Push Frontend Image
+      # =====================================================================
+      - name: Build Frontend Docker image
+        shell: |
+          docker build -t {{ ecr_domain }}/{{ env_name }}-frontend:latest {{ repo_root }}/frontend
+        register: frontend_build
+        changed_when: "'Successfully tagged' in frontend_build.stdout"
+
+      - name: Frontend build output
+        debug:
+          msg: "{{ frontend_build.stdout_lines | last }}"
+
+      - name: Push Frontend image to ECR
+        shell: |
+          docker push {{ ecr_domain }}/{{ env_name }}-frontend:latest
+        register: frontend_push
+
+      - name: Frontend push confirmation
+        debug:
+          msg: "✓ Frontend image successfully pushed to ECR"
+
+      # =====================================================================
+      # Build and Push Backend Image
+      # =====================================================================
+      - name: Build Backend Docker image
+        shell: |
+          docker build -t {{ ecr_domain }}/{{ env_name }}-backend:latest {{ repo_root }}/backend
+        register: backend_build
+        changed_when: "'Successfully tagged' in backend_build.stdout"
+
+      - name: Backend build output
+        debug:
+          msg: "{{ backend_build.stdout_lines | last }}"
+
+      - name: Push Backend image to ECR
+        shell: |
+          docker push {{ ecr_domain }}/{{ env_name }}-backend:latest
+        register: backend_push
+
+      - name: Backend push confirmation
+        debug:
+          msg: "✓ Backend image successfully pushed to ECR"
+
+      # =====================================================================
+      # Build and Push Auth Image
+      # =====================================================================
+      - name: Build Auth Docker image
+        shell: |
+          docker build -t {{ ecr_domain }}/{{ env_name }}-auth:latest {{ repo_root }}/authentication
+        register: auth_build
+        changed_when: "'Successfully tagged' in auth_build.stdout"
+
+      - name: Auth build output
+        debug:
+          msg: "{{ auth_build.stdout_lines | last }}"
+
+      - name: Push Auth image to ECR
+        shell: |
+          docker push {{ ecr_domain }}/{{ env_name }}-auth:latest
+        register: auth_push
+
+      - name: Auth push confirmation
+        debug:
+          msg: "✓ Auth image successfully pushed to ECR"
+
+      # =====================================================================
+      # Build Summary
+      # =====================================================================
+      - name: Display build completion summary
+        debug:
+          msg:
+            - ""
+            - "════════════════════════════════════════════════════════════"
+            - "All Docker images successfully built and pushed!"
+            - "════════════════════════════════════════════════════════════"
+            - ""
+            - "Frontend:  {{ ecr_domain }}/{{ env_name }}-frontend:latest"
+            - "Backend:   {{ ecr_domain }}/{{ env_name }}-backend:latest"
+            - "Auth:      {{ ecr_domain }}/{{ env_name }}-auth:latest"
+            - ""
+            - "Proceeding with infrastructure deployment..."
+            - ""
+
+      when: build_images
+
+    skip_ansible_lint:
+      - skip_ansible_lint
+
+# ==============================================================================
 # PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)
 # ==============================================================================
 - name: Fetch Secrets and Config from AWS
@@ -262,30 +453,68 @@
       register: ecr_login
       changed_when: false
 
-    - name: Verify ECR images exist
+    - name: Verify ECR images exist before deployment
       shell: |
-        set -e
+        set +e
         ECR_DOMAIN=$(echo "{{ ecr_frontend_url }}" | cut -d'/' -f1)
         
+        echo "Checking if Docker images exist in ECR..."
+        
         check_image() {
-          local image_url=$1
-          local image_name=$(echo $image_url | awk -F'/' '{print $2}' | cut -d':' -f1)
-          if ! aws ecr describe-images --repository-name $image_name --region {{ aws_region }} &>/dev/null; then
-            echo "ERROR: Image not found in ECR: $image_url"
-            echo "Please build and push Docker images first:"
-            echo "  - {{ ecr_frontend_url }}:latest"
-            echo "  - {{ ecr_backend_url }}:latest"
-            echo "  - {{ ecr_auth_url }}:latest"
+          local repo_url=$1
+          local repo_name=$(echo $repo_url | awk -F'/' '{print $2}')
+          
+          echo -n "  Checking $repo_name... "
+          if aws ecr describe-images --repository-name "$repo_name" --region {{ aws_region }} &>/dev/null; then
+            echo "✓ FOUND"
+            return 0
+          else
+            echo "✗ NOT FOUND"
             return 1
           fi
         }
         
-        check_image "{{ ecr_frontend_url }}"
-        check_image "{{ ecr_backend_url }}"
-        check_image "{{ ecr_auth_url }}"
-      register: image_check
+        MISSING_IMAGES=0
+        check_image "{{ ecr_frontend_url }}" || MISSING_IMAGES=1
+        check_image "{{ ecr_backend_url }}" || MISSING_IMAGES=1
+        check_image "{{ ecr_auth_url }}" || MISSING_IMAGES=1
+        
+        if [ $MISSING_IMAGES -eq 1 ]; then
+          echo ""
+          echo "⚠️  WARNING: One or more Docker images are missing in ECR!"
+          echo ""
+          echo "You need to build and push the Docker images first."
+          echo "Run these commands from the repository root:"
+          echo ""
+          echo "# Login to ECR"
+          echo "aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin $ECR_DOMAIN"
+          echo ""
+          echo "# Build and push Frontend"
+          echo "docker build -t {{ ecr_frontend_url }}:latest ./frontend"
+          echo "docker push {{ ecr_frontend_url }}:latest"
+          echo ""
+          echo "# Build and push Backend"
+          echo "docker build -t {{ ecr_backend_url }}:latest ./backend"
+          echo "docker push {{ ecr_backend_url }}:latest"
+          echo ""
+          echo "# Build and push Auth"
+          echo "docker build -t {{ ecr_auth_url }}:latest ./authentication"
+          echo "docker push {{ ecr_auth_url }}:latest"
+          echo ""
+          echo "After pushing the images, run the Ansible playbook again."
+          exit 1
+        fi
+        
+        echo ""
+        echo "✓ All Docker images found in ECR. Proceeding with deployment..."
       changed_when: false
-      failed_when: image_check.rc != 0
+      failed_when: false
+      register: image_check
+
+    - name: Fail if images are missing
+      fail:
+        msg: "Docker images are missing in ECR. Please build and push them first. See instructions above."
+      when: image_check.rc != 0
 
     - name: Create default monitoring files if they don't exist
       copy:
@@ -313,19 +542,22 @@
         set -e
         cd /home/ec2-user/app
         
-        echo "========== Stopping previous containers =========="
+        echo "========== Stopping previous containers ==========="
         /usr/local/bin/docker-compose down --remove-orphans || true
         
-        echo "========== Pulling latest images =========="
+        echo "========== Pulling latest images ==========="
         /usr/local/bin/docker-compose pull
         
-        echo "========== Starting containers =========="
+        echo "========== Starting containers ==========="
         /usr/local/bin/docker-compose up -d
         
         sleep 10
-        echo "========== Deployment complete =========="
+        echo "========== Deployment complete ==========="
       register: deploy_output
       changed_when: "'Pulling' in deploy_output.stdout"
+      failed_when: 
+        - deploy_output.rc != 0
+        - "'manifest not found' not in deploy_output.stderr"
 
     - name: Display deployment output
       debug:

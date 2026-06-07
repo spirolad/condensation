@@ -1,0 +1,121 @@
+name: _Deploy with Ansible
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+        type: string
+      ec2_ssh_user:
+        description: "SSH user for the EC2 instance"
+        required: false
+        default: "ec2-user"
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        description: "AWS Access Key ID"
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS Secret Access Key"
+        required: true
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+      ec2_ssh_user:
+        description: "SSH user for the EC2 instance"
+        required: false
+        default: "ec2-user"
+
+jobs:
+  deploy_ansible:
+    name: Deploy Application with Ansible
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          python -m pip install --upgrade pip
+          python -m pip install awscli ansible boto3 botocore
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Retrieve EC2 configuration from SSM Parameter Store
+        id: ec2_config
+        run: |
+          EC2_PUBLIC_IP=$(aws ssm get-parameter --name "/${{ inputs.env_name }}/ec2_public_ip" --query 'Parameter.Value' --output text --region ${{ inputs.aws_region }} 2>&1) || {
+            echo "⚠️  Failed to retrieve EC2 public IP from SSM Parameter Store"
+            echo "Parameter: /${{ inputs.env_name }}/ec2_public_ip"
+            echo "Region: ${{ inputs.aws_region }}"
+            exit 255
+          }
+          
+          EC2_SECRET_NAME=$(aws ssm get-parameter --name "/${{ inputs.env_name }}/ec2_secret_key_name" --query 'Parameter.Value' --output text --region ${{ inputs.aws_region }} 2>&1) || {
+            echo "⚠️  Failed to retrieve EC2 secret key name from SSM Parameter Store"
+            echo "Parameter: /${{ inputs.env_name }}/ec2_secret_key_name"
+            echo "Region: ${{ inputs.aws_region }}"
+            exit 255
+          }
+          
+          if [[ -z "$EC2_PUBLIC_IP" ]]; then
+            echo "❌ Error: EC2_PUBLIC_IP is empty. The EC2 instance may not have a public IP assigned."
+            exit 1
+          fi
+          
+          if [[ -z "$EC2_SECRET_NAME" ]]; then
+            echo "❌ Error: EC2_SECRET_NAME is empty."
+            exit 1
+          fi
+          
+          echo "public_ip=${EC2_PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "secret_name=${EC2_SECRET_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Retrieve EC2 private key from Secrets Manager
+        run: |
+          mkdir -p ~/.ssh
+          aws secretsmanager get-secret-value --secret-id "${{ steps.ec2_config.outputs.secret_name }}" --query 'SecretString' --output text > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Run Ansible Playbook
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+        run: |
+          ansible-playbook -i "${{ steps.ec2_config.outputs.public_ip }}," \
+            infra/ansible/deploy.yml \
+            -e "env_name=${{ inputs.env_name }}" \
+            -e "build_images=false" \
+            --user "${{ inputs.ec2_ssh_user }}" \
+            --private-key ~/.ssh/id_rsa \
+            --ssh-common-args='-o StrictHostKeyChecking=no'
+
+
+

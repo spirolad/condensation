@@ -1,0 +1,43 @@
+# Ansible Inventory for Condensation Deployment
+# 
+# How to use:
+# 1. Get your EC2 instance public IP (from AWS Console or AWS CLI)
+# 2. Replace <EC2_PUBLIC_IP> with actual IP address
+# 3. Save as inventory.ini
+# 4. Run: ansible-playbook -i inventory.ini infra/ansible/deploy.yml ...
+
+[ec2_instances]
+# Replace with your actual EC2 public IP address
+# Example: 35.170.197.224
+<EC2_PUBLIC_IP>
+
+[ec2_instances:vars]
+# EC2 username (default for Amazon Linux 2)
+ansible_user=ec2-user
+
+# SSH options
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Connection type
+ansible_connection=ssh
+
+# Become method for sudo
+ansible_become_method=sudo
+
+###############################################################################
+# To get your EC2 Public IP:
+#
+# From AWS Console:
+#   1. Go to EC2 Dashboard
+#   2. Find your instance (tag: Name=dev-app-ec2)
+#   3. Copy the "Public IPv4 address"
+#
+# From AWS CLI:
+#   aws ec2 describe-instances \
+#     --filters "Name=tag:Name,Values=dev-app-ec2" \
+#     --query 'Reservations[0].Instances[0].PublicIpAddress' \
+#     --output text --region us-east-1
+#
+# From Terraform Output:
+#   terraform output -raw ec2_instance_public_ip
+###############################################################################
