@@ -187,7 +187,7 @@
 
       when: build_images
 
-    skip_ansible_lint:
+      skip_ansible_lint:
       - skip_ansible_lint
 
 # ==============================================================================
