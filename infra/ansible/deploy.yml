@@ -201,13 +201,19 @@
 
     # --- DÉPLOIEMENT DE L'APPLICATION ---
 
-    - name: Create application directory
+    - name: Create application directory structure
       file:
-        path: /home/ec2-user/app
+        path: "{{ item }}"
         state: directory
         owner: ec2-user
         group: ec2-user
         mode: '0755'
+      loop:
+        - /home/ec2-user/app
+        - /home/ec2-user/app/monitoring
+        - /home/ec2-user/app/monitoring/grafana
+        - /home/ec2-user/app/monitoring/grafana/provisioning
+        - /home/ec2-user/app/monitoring/grafana/dashboards
 
     - name: Generate docker-compose.yml from template
       template:
@@ -221,11 +227,73 @@
       shell: |
         ECR_DOMAIN=$(echo "{{ ecr_frontend_url }}" | cut -d'/' -f1)
         aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin $ECR_DOMAIN
+      register: ecr_login
+      changed_when: false
+
+    - name: Verify ECR images exist
+      shell: |
+        set -e
+        ECR_DOMAIN=$(echo "{{ ecr_frontend_url }}" | cut -d'/' -f1)
+        
+        check_image() {
+          local image_url=$1
+          local image_name=$(echo $image_url | awk -F'/' '{print $2}' | cut -d':' -f1)
+          if ! aws ecr describe-images --repository-name $image_name --region {{ aws_region }} &>/dev/null; then
+            echo "ERROR: Image not found in ECR: $image_url"
+            echo "Please build and push Docker images first:"
+            echo "  - {{ ecr_frontend_url }}:latest"
+            echo "  - {{ ecr_backend_url }}:latest"
+            echo "  - {{ ecr_auth_url }}:latest"
+            return 1
+          fi
+        }
+        
+        check_image "{{ ecr_frontend_url }}"
+        check_image "{{ ecr_backend_url }}"
+        check_image "{{ ecr_auth_url }}"
+      register: image_check
+      changed_when: false
+      failed_when: image_check.rc != 0
+
+    - name: Create default monitoring files if they don't exist
+      copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+      loop:
+        - dest: /home/ec2-user/app/monitoring/prometheus.yml
+          content: |
+            global:
+              scrape_interval: 15s
+              evaluation_interval: 15s
+            scrape_configs:
+              - job_name: 'prometheus'
+                static_configs:
+                  - targets: ['localhost:9090']
+              - job_name: 'backend'
+                static_configs:
+                  - targets: ['backend:8080']
 
     - name: Deploy containers (Down, Pull, Up)
       shell: |
-        /usr/local/bin/docker-compose down --remove-orphans
+        /usr/local/bin/docker-compose down --remove-orphans || true
         /usr/local/bin/docker-compose pull
         /usr/local/bin/docker-compose up -d
       args:
         chdir: /home/ec2-user/app
+      register: deploy_result
+      failed_when: deploy_result.rc != 0 and "manifest not found" in deploy_result.stderr
+
+    - name: Display deployment status
+      debug:
+        msg:
+          - "Deployment completed successfully!"
+          - "Check logs with: docker-compose logs -f"
+          - "Access services at:"
+          - "  - Frontend: http://{{ ec2_public_ip }}"
+          - "  - Auth: http://{{ ec2_public_ip }}:8000"
+          - "  - Backend: http://{{ ec2_public_ip }}:8080"
+          - "  - Prometheus: http://{{ ec2_public_ip }}:9090"
+          - "  - Grafana: http://{{ ec2_public_ip }}:3000"
