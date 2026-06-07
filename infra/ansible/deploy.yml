@@ -9,7 +9,7 @@
   vars:
     aws_region: "us-east-1"
     env_name: "{{ env_name }}"
-    build_images: "{{ build_images | default(false) }}"
+    build_image: "{{ build_images | default(false) }}"
   tasks:
     - name: Prompt user to build Docker images
       pause:
@@ -29,19 +29,19 @@
           Do you want to continue? (yes/no)
         echo: yes
       register: user_build_choice
-      when: not build_images
+      when: not build_image
 
-    - name: Set build_images fact based on user input
+    - name: Set build_image fact based on user input
       set_fact:
-        build_images: true
+        build_image: true
       when: 
-        - not build_images
+        - not build_image
         - user_build_choice.user_input | lower == 'yes'
 
     - name: Display skip message
       debug:
         msg: "⏭️  Skipping Docker image build. Using existing images in ECR."
-      when: not build_images
+      when: not build_image
 
     - block:
       - name: Get AWS Account ID
@@ -185,7 +185,7 @@
             - "Proceeding with infrastructure deployment..."
             - ""
 
-      when: build_images
+      when: build_image
 
 # ==============================================================================
 # PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)
