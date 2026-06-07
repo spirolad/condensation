@@ -3,92 +3,186 @@ version: '3.8'
 name: condensation
 
 services:
+  # ============================================================================
+  # AUTHENTICATION SERVICE (Laravel)
+  # ============================================================================
   auth:
     image: "{{ ecr_auth_url }}:latest"
-    restart: on-failure
+    container_name: auth
+    restart: unless-stopped
     ports:
       - "8000:80"
     environment:
-      - APP_NAME=Laravel
-      - APP_ENV=production
-      - APP_KEY={{ auth_app_key | default('// TO COMPLETE') }}
-      - APP_DEBUG=false
-      - APP_URL={{ auth_app_url | default('// TO COMPLETE') }}
-      - DB_CONNECTION=pgsql
-      - DB_HOST={{ db_endpoint }}
-      - DB_PORT={{ db_port }}
-      - DB_DATABASE={{ auth_db_name }}
-      - DB_USERNAME={{ db_username }}
-      - DB_PASSWORD={{ db_password }}
-      - CLIENT_ID={{ auth_client_id | default('// TO COMPLETE') }}
-      - CACHE_STORE=database
-      - SESSION_DRIVER=database
-      - QUEUE_CONNECTION=database
+      # Laravel Configuration
+      APP_NAME: "Condensation Auth"
+      APP_ENV: "production"
+      APP_DEBUG: "false"
+      APP_URL: "http://auth:80"
+      
+      # Database Configuration
+      DB_CONNECTION: "pgsql"
+      DB_HOST: "{{ db_endpoint }}"
+      DB_PORT: "{{ db_port }}"
+      DB_DATABASE: "{{ auth_db_name }}"
+      DB_USERNAME: "{{ db_username }}"
+      DB_PASSWORD: "{{ db_password }}"
+      
+      # Auth Configuration
+      APP_KEY: "{{ auth_app_key | default('') }}"
+      CLIENT_ID: "{{ auth_client_id | default('') }}"
+      
+      # Cache & Session
+      CACHE_STORE: "database"
+      SESSION_DRIVER: "database"
+      QUEUE_CONNECTION: "database"
     volumes:
       - auth_keys:/var/www/html/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - condensation
 
+  # ============================================================================
+  # FRONTEND SERVICE (Next.js)
+  # ============================================================================
   frontend:
     image: "{{ ecr_frontend_url }}:latest"
+    container_name: frontend
+    restart: unless-stopped
     ports:
       - "80:3000"
     environment:
-      - AUTH_URL={{ auth_external_url | default('// TO COMPLETE') }}
-      - API_URL=http://auth:80
-      - BACKEND_URL=http://backend:8080
-      - CLIENT_ID={{ auth_client_id | default('// TO COMPLETE') }}
-      - REDIRECT_URI={{ frontend_redirect_uri | default('// TO COMPLETE') }}
-      - NODE_ENV=production
-      - INTERNAL_SECRET={{ internal_secret | default('// TO COMPLETE') }}
-      - STRIPE_SECRET_KEY={{ stripe_secret_key | default('// TO COMPLETE') }}
-      - STRIPE_WEBHOOK_SECRET={{ stripe_webhook_secret | default('// TO COMPLETE') }}
-      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={{ stripe_publishable_key | default('// TO COMPLETE') }}
+      # Application URLs
+      AUTH_URL: "http://auth:80"
+      API_URL: "http://auth:80"
+      BACKEND_URL: "http://backend:8080"
+      
+      # Next.js Configuration
+      NODE_ENV: "production"
+      
+      # OAuth Configuration
+      CLIENT_ID: "{{ auth_client_id | default('') }}"
+      REDIRECT_URI: "{{ frontend_redirect_uri | default('') }}"
+      
+      # Shared Secrets
+      INTERNAL_SECRET: "{{ internal_secret | default('') }}"
+      
+      # Payment (Stripe)
+      STRIPE_SECRET_KEY: "{{ stripe_secret_key | default('') }}"
+      STRIPE_WEBHOOK_SECRET: "{{ stripe_webhook_secret | default('') }}"
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "{{ stripe_publishable_key | default('') }}"
     depends_on:
-      - auth
-      - backend
+      auth:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - condensation
 
+  # ============================================================================
+  # BACKEND SERVICE (Spring Boot)
+  # ============================================================================
   backend:
     image: "{{ ecr_backend_url }}:latest"
+    container_name: backend
     hostname: backend
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://{{ db_endpoint }}:{{ db_port }}/{{ game_db_name }}
-      - SPRING_DATASOURCE_USERNAME={{ db_username }}
-      - SPRING_DATASOURCE_PASSWORD={{ db_password }}
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
-      - AUTH_URL=http://auth:80
-      - INTERNAL_SECRET={{ internal_secret | default('// TO COMPLETE') }}
-      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
-      - MANAGEMENT_ENDPOINTS_WEB_BASE_PATH=/actuator
-      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+      # Database Configuration
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ db_endpoint }}:{{ db_port }}/{{ game_db_name }}"
+      SPRING_DATASOURCE_USERNAME: "{{ db_username }}"
+      SPRING_DATASOURCE_PASSWORD: "{{ db_password }}"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+      
+      # Service URLs
+      AUTH_URL: "http://auth:80"
+      FRONTEND_URL: "http://frontend:3000"
+      
+      # Shared Secrets
+      INTERNAL_SECRET: "{{ internal_secret | default('') }}"
+      
+      # Monitoring & Actuator
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: "/actuator"
+      MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
+    depends_on:
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - condensation
 
+  # ============================================================================
+  # PROMETHEUS MONITORING
+  # ============================================================================
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    restart: unless-stopped
     ports:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - condensation
 
+  # ============================================================================
+  # GRAFANA VISUALIZATION
+  # ============================================================================
   grafana:
     image: grafana/grafana:9.5.8
     container_name: grafana
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user | default('admin') }}
-      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password | default('// TO COMPLETE') }}
+      GF_SECURITY_ADMIN_USER: "{{ grafana_admin_user | default('admin') }}"
+      GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password | default('admin') }}"
+      GF_INSTALL_PLUGINS: "grafana-worldmap-panel"
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+    networks:
+      - condensation
 
+# ============================================================================
+# VOLUMES & NETWORKS
+# ============================================================================
 volumes:
   auth_keys:
+    driver: local
   prometheus_data:
+    driver: local
   grafana_data:
+    driver: local
+
+networks:
+  condensation:
+    driver: bridge

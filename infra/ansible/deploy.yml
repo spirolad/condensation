@@ -215,6 +215,19 @@
         - /home/ec2-user/app/monitoring/grafana/provisioning
         - /home/ec2-user/app/monitoring/grafana/dashboards
 
+    - name: Validate required variables are not empty
+      assert:
+        that:
+          - ecr_frontend_url | length > 0
+          - ecr_backend_url | length > 0
+          - ecr_auth_url | length > 0
+          - db_endpoint | length > 0
+          - db_username | length > 0
+          - db_password | length > 0
+          - auth_db_name | length > 0
+          - game_db_name | length > 0
+        fail_msg: "ERROR: One or more required variables are empty!"
+
     - name: Generate docker-compose.yml from template
       template:
         src: docker-compose.yml.j2
@@ -222,6 +235,25 @@
         owner: ec2-user
         group: ec2-user
         mode: '0644'
+
+    - name: Validate generated docker-compose.yml has no unresolved variables
+      shell: |
+        if grep -E '\{\{.*\}\}' /home/ec2-user/app/docker-compose.yml; then
+          echo "ERROR: Found unresolved Jinja2 variables in docker-compose.yml"
+          exit 1
+        fi
+        echo "✓ docker-compose.yml successfully generated with all variables resolved"
+      changed_when: false
+
+    - name: Display generated docker-compose.yml (for debugging)
+      shell: cat /home/ec2-user/app/docker-compose.yml
+      register: docker_compose_content
+      changed_when: false
+
+    - name: Show docker-compose content
+      debug:
+        msg: "{{ docker_compose_content.stdout_lines }}"
+        verbosity: 1
 
     - name: Login to ECR on the EC2 instance
       shell: |
@@ -278,22 +310,142 @@
 
     - name: Deploy containers (Down, Pull, Up)
       shell: |
+        set -e
+        cd /home/ec2-user/app
+        
+        echo "========== Stopping previous containers =========="
         /usr/local/bin/docker-compose down --remove-orphans || true
+        
+        echo "========== Pulling latest images =========="
         /usr/local/bin/docker-compose pull
+        
+        echo "========== Starting containers =========="
         /usr/local/bin/docker-compose up -d
+        
+        sleep 10
+        echo "========== Deployment complete =========="
+      register: deploy_output
+      changed_when: "'Pulling' in deploy_output.stdout"
+
+    - name: Display deployment output
+      debug:
+        msg: "{{ deploy_output.stdout_lines }}"
+
+    - name: Wait for services to be healthy
+      shell: |
+        echo "Waiting for services to be healthy..."
+        
+        # Check Auth service
+        echo -n "Auth service: "
+        for i in {1..30}; do
+          if docker logs auth 2>&1 | grep -q "Application ready"; then
+            echo "✓ READY"
+            break
+          fi
+          if [ $i -eq 30 ]; then echo "✗ TIMEOUT"; fi
+          sleep 2
+        done
+        
+        # Check Backend service  
+        echo -n "Backend service: "
+        for i in {1..30}; do
+          if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+            echo "✓ READY"
+            break
+          fi
+          if [ $i -eq 30 ]; then echo "✗ TIMEOUT"; fi
+          sleep 2
+        done
+        
+        # Check Frontend service
+        echo -n "Frontend service: "
+        for i in {1..30}; do
+          if curl -sf http://localhost/ > /dev/null 2>&1; then
+            echo "✓ READY"
+            break
+          fi
+          if [ $i -eq 30 ]; then echo "✗ TIMEOUT"; fi
+          sleep 2
+        done
+        
+        echo "All services initialization complete!"
+      changed_when: false
+
+    - name: Check container status
+      shell: /usr/local/bin/docker-compose ps
       args:
         chdir: /home/ec2-user/app
-      register: deploy_result
-      failed_when: deploy_result.rc != 0 and "manifest not found" in deploy_result.stderr
+      register: container_status
+      changed_when: false
 
-    - name: Display deployment status
+    - name: Display container status
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Show service logs for debugging
+      shell: |
+        echo "===== Auth Logs ====="
+        docker logs auth --tail 20
+        echo ""
+        echo "===== Backend Logs ====="
+        docker logs backend --tail 20
+        echo ""
+        echo "===== Frontend Logs ====="
+        docker logs frontend --tail 20
+      register: service_logs
+      changed_when: false
+
+    - name: Display service logs
+      debug:
+        msg: "{{ service_logs.stdout_lines }}"
+        verbosity: 1
+
+    # --- DEPLOYMENT SUMMARY ---
+
+    - name: Display deployment summary
       debug:
         msg:
-          - "Deployment completed successfully!"
-          - "Check logs with: docker-compose logs -f"
-          - "Access services at:"
-          - "  - Frontend: http://{{ ec2_public_ip }}"
-          - "  - Auth: http://{{ ec2_public_ip }}:8000"
-          - "  - Backend: http://{{ ec2_public_ip }}:8080"
-          - "  - Prometheus: http://{{ ec2_public_ip }}:9090"
-          - "  - Grafana: http://{{ ec2_public_ip }}:3000"
+          - "╔════════════════════════════════════════════════════════════╗"
+          - "║          DEPLOYMENT COMPLETED SUCCESSFULLY!               ║"
+          - "╚════════════════════════════════════════════════════════════╝"
+          - ""
+          - "📍 EC2 INSTANCE INFORMATION:"
+          - "   • Instance ID: {{ ec2_instance_id }}"
+          - "   • Public IP: {{ ec2_public_ip }}"
+          - "   • Private IP: {{ ec2_private_ip }}"
+          - ""
+          - "🔗 SERVICE ACCESS URLS:"
+          - "   • Frontend: http://{{ ec2_public_ip }}:80"
+          - "   • Auth Service: http://{{ ec2_public_ip }}:8000"
+          - "   • Backend API: http://{{ ec2_public_ip }}:8080"
+          - "   • Prometheus: http://{{ ec2_public_ip }}:9090"
+          - "   • Grafana: http://{{ ec2_public_ip }}:3001"
+          - ""
+          - "📊 DATABASE INFORMATION:"
+          - "   • Host: {{ db_endpoint }}"
+          - "   • Port: {{ db_port }}"
+          - "   • Auth Database: {{ auth_db_name }}"
+          - "   • Game Database: {{ game_db_name }}"
+          - ""
+          - "🐳 DOCKER IMAGES:"
+          - "   • Frontend: {{ ecr_frontend_url }}:latest"
+          - "   • Backend: {{ ecr_backend_url }}:latest"
+          - "   • Auth: {{ ecr_auth_url }}:latest"
+          - ""
+          - "📝 USEFUL COMMANDS:"
+          - "   • View logs: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose logs -f'"
+          - "   • Container status: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose ps'"
+          - "   • Restart services: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose restart'"
+          - ""
+          - "⚠️  COMMON ISSUES & TROUBLESHOOTING:"
+          - "   1. Page loads infinitely:"
+          - "      - Check backend logs: docker logs backend"
+          - "      - Verify database connectivity: {{ db_endpoint }}:{{ db_port }}"
+          - "      - Check frontend env vars are correct"
+          - "   2. Services not responding:"
+          - "      - Wait 60s for all services to be healthy"
+          - "      - Check network connectivity between containers"
+          - "      - Verify security group allows all necessary ports"
+          - "   3. ECR login failed:"
+          - "      - Verify IAM role has ECR permissions"
+          - "      - Check AWS region is correct: {{ aws_region }}"
