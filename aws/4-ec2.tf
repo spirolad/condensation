@@ -92,10 +92,11 @@ resource "aws_security_group" "ec2" {
 
 # EC2 Instance
 resource "aws_instance" "app" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = var.ec2_instance_type
-  key_name               = aws_key_pair.ec2_key.key_name
-  iam_instance_profile   = "LabInstanceProfile"
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = var.ec2_instance_type
+  key_name                    = aws_key_pair.ec2_key.key_name
+  iam_instance_profile        = "LabInstanceProfile"
+  associate_public_ip_address = true
 
   vpc_security_group_ids = [aws_security_group.ec2.id]
   subnet_id              = data.aws_subnets.default.ids[1]
