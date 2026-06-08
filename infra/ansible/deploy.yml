@@ -108,11 +108,11 @@
         shell: |
           docker build -t {{ ecr_domain }}/{{ env_name }}-frontend:latest {{ repo_root }}/frontend
         register: frontend_build
-        changed_when: "'Successfully tagged' in frontend_build.stdout"
+        changed_when: "'Successfully tagged' in frontend_build.stdout or 'Successfully tagged' in frontend_build.stderr"
 
       - name: Frontend build output
         debug:
-          msg: "{{ frontend_build.stdout_lines | last }}"
+          msg: "{{ (frontend_build.stdout_lines + frontend_build.stderr_lines) | last | default('No output') }}"
 
       - name: Push Frontend image to ECR
         shell: |
@@ -130,11 +130,11 @@
         shell: |
           docker build -t {{ ecr_domain }}/{{ env_name }}-backend:latest {{ repo_root }}/backend
         register: backend_build
-        changed_when: "'Successfully tagged' in backend_build.stdout"
+        changed_when: "'Successfully tagged' in backend_build.stdout or 'Successfully tagged' in backend_build.stderr"
 
       - name: Backend build output
         debug:
-          msg: "{{ backend_build.stdout_lines | last }}"
+          msg: "{{ (backend_build.stdout_lines + backend_build.stderr_lines) | last | default('No output') }}"
 
       - name: Push Backend image to ECR
         shell: |
@@ -156,7 +156,7 @@
 
       - name: Auth build output
         debug:
-          msg: "{{ auth_build.stdout_lines | last }}"
+          msg: "{{ (auth_build.stdout_lines + auth_build.stderr_lines) | last | default('No output') }}"
 
       - name: Push Auth image to ECR
         shell: |
