@@ -1,4 +1,4 @@
-name: _Deploy with Ansible
+name: _Deploy with Ansible without building docker images
 
 on:
   workflow_call:
