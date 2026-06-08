@@ -185,7 +185,7 @@
             - "Proceeding with infrastructure deployment..."
             - ""
 
-      when: build_image
+      when: build_image | bool
 
 # ==============================================================================
 # PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)

@@ -112,7 +112,7 @@ jobs:
           ansible-playbook -i "${{ steps.ec2_config.outputs.public_ip }}," \
             infra/ansible/deploy.yml \
             -e "env_name=${{ inputs.env_name }}" \
-            -e "build_images=true" \
+            -e 'build_images=True' \
             --user "${{ inputs.ec2_ssh_user }}" \
             --private-key ~/.ssh/id_rsa \
             --ssh-common-args='-o StrictHostKeyChecking=no'
