@@ -115,7 +115,6 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: "/actuator"
       MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
-    depends_on:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
