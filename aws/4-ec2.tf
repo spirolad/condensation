@@ -111,6 +111,7 @@ resource "aws_ssm_parameter" "ec2_instance_id" {
   name  = "/${var.environment}/ec2_instance_id"
   type  = "String"
   value = aws_instance.app.id
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-instance-id"
@@ -124,6 +125,7 @@ resource "aws_ssm_parameter" "ec2_public_ip" {
   name  = "/${var.environment}/ec2_public_ip"
   type  = "String"
   value = aws_instance.app.public_ip
+    overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-public-ip"
@@ -137,6 +139,7 @@ resource "aws_ssm_parameter" "ec2_secret_key_name" {
   name  = "/${var.environment}/ec2_secret_key_name"
   type  = "String"
   value = aws_secretsmanager_secret.application_key.name
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-secret-key-name"
@@ -150,6 +153,7 @@ resource "aws_ssm_parameter" "ec2_key_pair_name" {
   name  = "/${var.environment}/ec2_key_pair_name"
   type  = "String"
   value = aws_key_pair.ec2_key.key_name
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-key-pair-name"
@@ -163,6 +167,7 @@ resource "aws_ssm_parameter" "ec2_private_ip" {
   name  = "/${var.environment}/ec2_private_ip"
   type  = "String"
   value = aws_instance.app.private_ip
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-private-ip"
@@ -176,6 +181,7 @@ resource "aws_ssm_parameter" "ecr_frontend_url" {
   name  = "/${var.environment}/ecr_frontend_url"
   type  = "String"
   value = aws_ecr_repository.frontend.repository_url
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ecr-frontend-url"
@@ -189,6 +195,7 @@ resource "aws_ssm_parameter" "ecr_backend_url" {
   name  = "/${var.environment}/ecr_backend_url"
   type  = "String"
   value = aws_ecr_repository.backend.repository_url
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ecr-backend-url"
@@ -202,6 +209,7 @@ resource "aws_ssm_parameter" "ecr_auth_url" {
   name  = "/${var.environment}/ecr_auth_url"
   type  = "String"
   value = aws_ecr_repository.auth.repository_url
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ecr-auth-url"
