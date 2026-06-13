@@ -1,4 +1,4 @@
-name: _Deploy with Terraform
+name: _Destroy with Terraform
 
 on:
   workflow_call:
