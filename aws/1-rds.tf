@@ -9,31 +9,25 @@ resource "aws_db_subnet_group" "postgres" {
 
 resource "aws_security_group" "rds_postgres" {
   name        = "condensation-${var.environment}-rds-sg"
-  description = "Security group for RDS PostgreSQL instance"
+  description = "Security group for RDS PostgreSQL instance (least privilege - EC2 only)"
   vpc_id      = aws_vpc.condensation.id
 
+  # Only allow PostgreSQL from EC2 instance (least privilege)
   ingress {
-    description     = "PostgreSQL from EC2 security group"
+    description     = "PostgreSQL from EC2 instance only"
     from_port       = var.db_port
     to_port         = var.db_port
     protocol        = "tcp"
     security_groups = [aws_security_group.ec2.id]
   }
 
-  ingress {
-    description = "PostgreSQL from anywhere"
-    from_port   = var.db_port
-    to_port     = var.db_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
+  # Minimal egress - RDS doesn't need to initiate outbound connections
   egress {
-    description = "Allow all outbound traffic"
+    description = "Allow minimal outbound (if needed)"
     from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = {
@@ -49,7 +43,7 @@ resource "aws_db_instance" "postgres" {
   engine_version = "15"
   instance_class = var.db_instance_class
 
-  publicly_accessible = true
+  publicly_accessible = false
 
   allocated_storage = var.db_allocated_storage
   storage_type      = "gp3"

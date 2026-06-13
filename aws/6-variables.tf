@@ -163,3 +163,10 @@ variable "private_subnet_2_cidr" {
   type        = string
   default     = "10.0.4.0/24"
 }
+
+# Security Variables (least privilege)
+variable "ssh_allowed_cidr" {
+  description = "CIDR block allowed for SSH access (set to 0.0.0.0/0 for anywhere, or restrict to your IP)"
+  type        = string
+  default     = "0.0.0.0/0"
+}

@@ -29,20 +29,22 @@ resource "aws_key_pair" "ec2_key" {
   }
 }
 
-# Security Group for EC2
+# Security Group for EC2 (least privilege)
 resource "aws_security_group" "ec2" {
   name        = "condensation-${var.environment}-ec2-sg"
-  description = "Security group for EC2 instance - allows HTTP, HTTPS, SSH, and application ports"
+  description = "Security group for EC2 instance - restricted to necessary ports only"
   vpc_id      = aws_vpc.condensation.id
 
+  # SSH - allow from anywhere (can be restricted to specific IPs via SSH_ALLOWED_CIDR variable)
   ingress {
     description = "SSH from anywhere"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.ssh_allowed_cidr]
   }
 
+  # HTTP - allow from public internet
   ingress {
     description = "HTTP"
     from_port   = 80
@@ -51,6 +53,7 @@ resource "aws_security_group" "ec2" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # HTTPS - allow from public internet
   ingress {
     description = "HTTPS"
     from_port   = 443
@@ -59,60 +62,108 @@ resource "aws_security_group" "ec2" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Frontend application port
   ingress {
-    description = "Frontend"
+    description = "Frontend service"
     from_port   = 4000
     to_port     = 4000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Backend service ports
   ingress {
-    description = "Backend"
+    description = "Backend service"
     from_port   = 8080
     to_port     = 8082
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Auth service
   ingress {
-    description = "Auth Service"
+    description = "Auth service"
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Monitoring ports (INTERNAL ONLY - least privilege)
   ingress {
-    description = "NodeExporter Metrics"
+    description = "NodeExporter Metrics (internal only)"
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr] # Only from within VPC
   }
 
   ingress {
-    description = "Prometheus Metrics"
+    description = "Prometheus Metrics (internal only)"
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr] # Only from within VPC
   }
 
   ingress {
-    description = "Grafana"
+    description = "Grafana (internal only)"
     from_port   = 3000
     to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr] # Only from within VPC
+  }
+
+  # Outbound - restricted to necessary destinations
+  # Allow outbound HTTP/HTTPS for package management and external APIs
+  egress {
+    description = "Allow HTTPS (package downloads, external APIs)"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "Allow HTTP (package downloads)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow DNS
+  egress {
+    description = "Allow DNS queries"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow DNS queries TCP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow outbound to RDS in private subnet
+  egress {
+    description = "Allow to RDS databases"
+    from_port   = var.db_port
+    to_port     = var.db_port
+    protocol    = "tcp"
+    cidr_blocks = [var.private_subnet_1_cidr, var.private_subnet_2_cidr]
+  }
+
+  egress {
+    description = "Allow to RDS game database"
+    from_port   = var.db_game_port
+    to_port     = var.db_game_port
+    protocol    = "tcp"
+    cidr_blocks = [var.private_subnet_1_cidr, var.private_subnet_2_cidr]
   }
 
   tags = {

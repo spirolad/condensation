@@ -122,38 +122,63 @@ resource "aws_route_table_association" "public_2" {
   route_table_id = aws_route_table.public.id
 }
 
-# Network ACL for public subnets
+# Route table for private subnets (no internet access)
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.condensation.id
+
+  tags = {
+    Name = "condensation-${var.environment}-private-rt"
+  }
+}
+
+# Associate private subnet 1 with private route table
+resource "aws_route_table_association" "private_1" {
+  subnet_id      = aws_subnet.private_1.id
+  route_table_id = aws_route_table.private.id
+}
+
+# Associate private subnet 2 with private route table
+resource "aws_route_table_association" "private_2" {
+  subnet_id      = aws_subnet.private_2.id
+  route_table_id = aws_route_table.private.id
+}
+
+# Network ACL for public subnets (least privilege)
 resource "aws_network_acl" "public" {
   vpc_id     = aws_vpc.condensation.id
   subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
+  # HTTP for external access
   ingress {
     protocol   = "tcp"
     rule_no    = 100
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 110
     action     = "allow"
     cidr_block = "0.0.0.0/0"
     from_port  = 80
     to_port    = 80
   }
 
+  # HTTPS for external access
   ingress {
     protocol   = "tcp"
-    rule_no    = 120
+    rule_no    = 110
     action     = "allow"
     cidr_block = "0.0.0.0/0"
     from_port  = 443
     to_port    = 443
   }
 
+  # SSH (restricted to specific IPs would be better - TODO: add variable)
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Frontend service port
   ingress {
     protocol   = "tcp"
     rule_no    = 130
@@ -163,6 +188,7 @@ resource "aws_network_acl" "public" {
     to_port    = 4000
   }
 
+  # Backend service ports
   ingress {
     protocol   = "tcp"
     rule_no    = 140
@@ -172,17 +198,19 @@ resource "aws_network_acl" "public" {
     to_port    = 8082
   }
 
+  # Return traffic for ephemeral ports
   ingress {
     protocol   = "tcp"
     rule_no    = 150
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 9100
-    to_port    = 9100
+    from_port  = 1024
+    to_port    = 65535
   }
 
+  # UDP ephemeral ports for DNS and other services
   ingress {
-    protocol   = "tcp"
+    protocol   = "udp"
     rule_no    = 160
     action     = "allow"
     cidr_block = "0.0.0.0/0"
@@ -190,6 +218,17 @@ resource "aws_network_acl" "public" {
     to_port    = 65535
   }
 
+  # DNS queries
+  ingress {
+    protocol   = "udp"
+    rule_no    = 170
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 53
+    to_port    = 53
+  }
+
+  # Allow outbound traffic
   egress {
     protocol   = "-1"
     rule_no    = 100
@@ -201,6 +240,84 @@ resource "aws_network_acl" "public" {
 
   tags = {
     Name = "condensation-${var.environment}-public-nacl"
+  }
+}
+
+# Network ACL for private subnets (RDS - no internet)
+resource "aws_network_acl" "private" {
+  vpc_id     = aws_vpc.condensation.id
+  subnet_ids = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+
+  # PostgreSQL from EC2 subnet only
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.public_subnet_1_cidr
+    from_port  = var.db_port
+    to_port    = var.db_port
+  }
+
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = var.public_subnet_2_cidr
+    from_port  = var.db_port
+    to_port    = var.db_port
+  }
+
+  # Game database port from EC2
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = var.public_subnet_1_cidr
+    from_port  = var.db_game_port
+    to_port    = var.db_game_port
+  }
+
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 130
+    action     = "allow"
+    cidr_block = var.public_subnet_2_cidr
+    from_port  = var.db_game_port
+    to_port    = var.db_game_port
+  }
+
+  # Return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 140
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # DNS
+  ingress {
+    protocol   = "udp"
+    rule_no    = 150
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 53
+    to_port    = 53
+  }
+
+  # Allow outbound to EC2 subnet and internet
+  egress {
+    protocol   = "-1"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
+  }
+
+  tags = {
+    Name = "condensation-${var.environment}-private-nacl"
   }
 }
 
