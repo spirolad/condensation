@@ -7,9 +7,9 @@ resource "tls_private_key" "key" {
 # AWS Secrets Manager Secret for the private key
 resource "aws_secretsmanager_secret" "application_key" {
   name = "${var.environment}-app-secretkey"
-  
+
   tags = {
-    Name        = "${var.environment}-app-secretkey"
+    Name = "${var.environment}-app-secretkey"
   }
 }
 
@@ -31,14 +31,30 @@ resource "aws_key_pair" "ec2_key" {
 
 # Security Group for EC2
 resource "aws_security_group" "ec2" {
-  name        = "${var.environment}-ec2-sg"
-  description = "Security group for EC2 instance"
-  vpc_id      = data.aws_vpc.default.id
+  name        = "condensation-${var.environment}-ec2-sg"
+  description = "Security group for EC2 instance - allows HTTP, HTTPS, SSH, and application ports"
+  vpc_id      = aws_vpc.condensation.id
 
   ingress {
     description = "SSH from anywhere"
     from_port   = 22
     to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -60,19 +76,33 @@ resource "aws_security_group" "ec2" {
   }
 
   ingress {
-    description = "auth"
+    description = "Auth Service"
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-
-
   ingress {
-    description = "NodeExporter"
+    description = "NodeExporter Metrics"
     from_port   = 9100
     to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Prometheus Metrics"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Grafana"
+    from_port   = 3000
+    to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -86,11 +116,11 @@ resource "aws_security_group" "ec2" {
   }
 
   tags = {
-    Name = "${var.environment}-ec2-sg"
+    Name = "condensation-${var.environment}-ec2-sg"
   }
 }
 
-# EC2 Instance
+# EC2 Instance in public subnet for external access
 resource "aws_instance" "app" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.ec2_instance_type
@@ -98,19 +128,29 @@ resource "aws_instance" "app" {
   iam_instance_profile        = "LabInstanceProfile"
   associate_public_ip_address = true
 
+  # Place in first public subnet to ensure internet accessibility
+  subnet_id              = aws_subnet.public_1.id
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  subnet_id              = data.aws_subnets.default.ids[1]
+
+  # Ensure public IP is assigned
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = 30
+    delete_on_termination = true
+  }
 
   tags = {
-    Name = "${var.environment}-app-ec2"
+    Name = "condensation-${var.environment}-app-ec2"
   }
+
+  depends_on = [aws_internet_gateway.condensation]
 }
 
 # SSM Parameter for EC2 Instance ID
 resource "aws_ssm_parameter" "ec2_instance_id" {
-  name  = "/${var.environment}/ec2_instance_id"
-  type  = "String"
-  value = aws_instance.app.id
+  name      = "/${var.environment}/ec2_instance_id"
+  type      = "String"
+  value     = aws_instance.app.id
   overwrite = true
 
   tags = {
@@ -122,10 +162,10 @@ resource "aws_ssm_parameter" "ec2_instance_id" {
 
 # SSM Parameter for EC2 public IP
 resource "aws_ssm_parameter" "ec2_public_ip" {
-  name  = "/${var.environment}/ec2_public_ip"
-  type  = "String"
-  value = aws_instance.app.public_ip
-    overwrite = true
+  name      = "/${var.environment}/ec2_public_ip"
+  type      = "String"
+  value     = aws_instance.app.public_ip
+  overwrite = true
 
   tags = {
     Name = "${var.environment}-ec2-public-ip"
@@ -136,9 +176,9 @@ resource "aws_ssm_parameter" "ec2_public_ip" {
 
 # SSM Parameter for EC2 secret key name
 resource "aws_ssm_parameter" "ec2_secret_key_name" {
-  name  = "/${var.environment}/ec2_secret_key_name"
-  type  = "String"
-  value = aws_secretsmanager_secret.application_key.name
+  name      = "/${var.environment}/ec2_secret_key_name"
+  type      = "String"
+  value     = aws_secretsmanager_secret.application_key.name
   overwrite = true
 
   tags = {
@@ -150,9 +190,9 @@ resource "aws_ssm_parameter" "ec2_secret_key_name" {
 
 # SSM Parameter for EC2 key pair name
 resource "aws_ssm_parameter" "ec2_key_pair_name" {
-  name  = "/${var.environment}/ec2_key_pair_name"
-  type  = "String"
-  value = aws_key_pair.ec2_key.key_name
+  name      = "/${var.environment}/ec2_key_pair_name"
+  type      = "String"
+  value     = aws_key_pair.ec2_key.key_name
   overwrite = true
 
   tags = {
@@ -164,9 +204,9 @@ resource "aws_ssm_parameter" "ec2_key_pair_name" {
 
 # SSM Parameter for EC2 private IP
 resource "aws_ssm_parameter" "ec2_private_ip" {
-  name  = "/${var.environment}/ec2_private_ip"
-  type  = "String"
-  value = aws_instance.app.private_ip
+  name      = "/${var.environment}/ec2_private_ip"
+  type      = "String"
+  value     = aws_instance.app.private_ip
   overwrite = true
 
   tags = {
@@ -178,9 +218,9 @@ resource "aws_ssm_parameter" "ec2_private_ip" {
 
 # SSM Parameter for ECR Frontend URL
 resource "aws_ssm_parameter" "ecr_frontend_url" {
-  name  = "/${var.environment}/ecr_frontend_url"
-  type  = "String"
-  value = aws_ecr_repository.frontend.repository_url
+  name      = "/${var.environment}/ecr_frontend_url"
+  type      = "String"
+  value     = aws_ecr_repository.frontend.repository_url
   overwrite = true
 
   tags = {
@@ -192,9 +232,9 @@ resource "aws_ssm_parameter" "ecr_frontend_url" {
 
 # SSM Parameter for ECR Backend URL
 resource "aws_ssm_parameter" "ecr_backend_url" {
-  name  = "/${var.environment}/ecr_backend_url"
-  type  = "String"
-  value = aws_ecr_repository.backend.repository_url
+  name      = "/${var.environment}/ecr_backend_url"
+  type      = "String"
+  value     = aws_ecr_repository.backend.repository_url
   overwrite = true
 
   tags = {
@@ -206,9 +246,9 @@ resource "aws_ssm_parameter" "ecr_backend_url" {
 
 # SSM Parameter for ECR Auth URL
 resource "aws_ssm_parameter" "ecr_auth_url" {
-  name  = "/${var.environment}/ecr_auth_url"
-  type  = "String"
-  value = aws_ecr_repository.auth.repository_url
+  name      = "/${var.environment}/ecr_auth_url"
+  type      = "String"
+  value     = aws_ecr_repository.auth.repository_url
   overwrite = true
 
   tags = {

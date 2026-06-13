@@ -1,3 +1,39 @@
+# VPC and Network Outputs
+output "vpc_id" {
+  description = "VPC ID"
+  value       = aws_vpc.condensation.id
+}
+
+output "vpc_name" {
+  description = "VPC Name"
+  value       = "condensation-${var.environment}-vpc"
+}
+
+output "public_subnet_1_id" {
+  description = "Public Subnet 1 ID (AZ 1a)"
+  value       = aws_subnet.public_1.id
+}
+
+output "public_subnet_2_id" {
+  description = "Public Subnet 2 ID (AZ 1b)"
+  value       = aws_subnet.public_2.id
+}
+
+output "private_subnet_1_id" {
+  description = "Private Subnet 1 ID for RDS (AZ 1a)"
+  value       = aws_subnet.private_1.id
+}
+
+output "private_subnet_2_id" {
+  description = "Private Subnet 2 ID for RDS (AZ 1b)"
+  value       = aws_subnet.private_2.id
+}
+
+output "internet_gateway_id" {
+  description = "Internet Gateway ID"
+  value       = aws_internet_gateway.condensation.id
+}
+
 # RDS Outputs
 output "rds_endpoint" {
   description = "RDS instance endpoint"
@@ -90,6 +126,21 @@ output "ec2_instance_private_ip" {
 output "ec2_key_pair_name" {
   description = "Name of the EC2 key pair"
   value       = aws_key_pair.ec2_key.key_name
+}
+
+output "ec2_security_group_id" {
+  description = "Security Group ID for EC2"
+  value       = aws_security_group.ec2.id
+}
+
+output "ec2_security_group_name" {
+  description = "Security Group name for EC2"
+  value       = aws_security_group.ec2.name
+}
+
+output "ec2_instance_name" {
+  description = "Name of the EC2 instance"
+  value       = "condensation-${var.environment}-app-ec2"
 }
 
 output "ec2_secret_key_arn" {

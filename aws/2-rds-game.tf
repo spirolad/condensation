@@ -1,16 +1,16 @@
 resource "aws_db_subnet_group" "postgres_game" {
-  name       = "${var.db_game_name}-sbnet-group"
-  subnet_ids = data.aws_subnets.default.ids
+  name       = "condensation-${var.environment}-game-subnet-group"
+  subnet_ids = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 
   tags = {
-    Name = "${var.environment}-${var.db_game_name}-subnet-group"
+    Name = "condensation-${var.environment}-game-subnet-group"
   }
 }
 
 resource "aws_security_group" "rds_game_postgres" {
-  name        = "${var.db_game_name}-rds-game-sg"
-  description = "Security group for RDS PostgreSQL instance"
-  vpc_id      = data.aws_vpc.default.id
+  name        = "condensation-${var.environment}-game-rds-sg"
+  description = "Security group for RDS PostgreSQL game instance"
+  vpc_id      = aws_vpc.condensation.id
 
   ingress {
     description     = "PostgreSQL from EC2 security group"
@@ -21,11 +21,11 @@ resource "aws_security_group" "rds_game_postgres" {
   }
 
   ingress {
-    description     = "PostgreSQL from user IP"
-    from_port       = var.db_game_port
-    to_port         = var.db_game_port
-    protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    description = "PostgreSQL from anywhere"
+    from_port   = var.db_game_port
+    to_port     = var.db_game_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -37,7 +37,7 @@ resource "aws_security_group" "rds_game_postgres" {
   }
 
   tags = {
-    Name = "${var.environment}-${var.db_game_name}-rds-game-sg"
+    Name = "condensation-${var.environment}-game-rds-sg"
   }
 }
 
@@ -51,9 +51,9 @@ resource "aws_db_instance" "postgres_game" {
 
   publicly_accessible = true
 
-  allocated_storage     = var.db_game_allocated_storage
-  storage_type          = "gp3"
-  storage_encrypted     = true
+  allocated_storage = var.db_game_allocated_storage
+  storage_type      = "gp3"
+  storage_encrypted = true
 
   db_name  = replace(replace(var.db_game_name, "-", ""), "_", "")
   username = var.db_game_username
@@ -65,8 +65,8 @@ resource "aws_db_instance" "postgres_game" {
   vpc_security_group_ids = [aws_security_group.rds_game_postgres.id]
 
   backup_retention_period = var.backup_retention_period
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "mon:04:00-mon:05:00"
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "mon:04:00-mon:05:00"
 
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.db_game_name}-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
