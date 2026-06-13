@@ -1,6 +1,6 @@
 resource "aws_db_subnet_group" "postgres" {
   name       = "${var.db_name}-subnet-group"
-  subnet_ids = aws_subnet.private_db[*].id
+  subnet_ids = data.aws_subnets.default.ids
 
   tags = {
     Name = "${var.environment}-${var.db_name}-subnet-group"
@@ -9,11 +9,11 @@ resource "aws_db_subnet_group" "postgres" {
 
 resource "aws_security_group" "rds_postgres" {
   name        = "${var.db_name}-rds-sg"
-  description = "Security group for auth PostgreSQL RDS instance"
+  description = "Security group for RDS PostgreSQL instance"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description     = "PostgreSQL from application security group only"
+    description     = "PostgreSQL from EC2 security group"
     from_port       = var.db_port
     to_port         = var.db_port
     protocol        = "tcp"
@@ -29,7 +29,7 @@ resource "aws_security_group" "rds_postgres" {
   }
 
   egress {
-    description = "Allow outbound traffic inside VPC"
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -49,7 +49,7 @@ resource "aws_db_instance" "postgres" {
   engine_version = "15"
   instance_class = var.db_instance_class
 
-  publicly_accessible = false
+  publicly_accessible = true
 
   allocated_storage     = var.db_allocated_storage
   storage_type          = "gp3"
