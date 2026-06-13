@@ -1,7 +1,4 @@
 ---
-# ==============================================================================
-# PLAY 0 : Build and Push Docker Images to ECR
-# ==============================================================================
 - name: Build and Push Docker Images to ECR
   hosts: localhost
   connection: local
@@ -40,7 +37,7 @@
 
     - name: Display skip message
       debug:
-        msg: "⏭️  Skipping Docker image build. Using existing images in ECR."
+        msg: "Skipping Docker image build. Using existing images in ECR."
       when: not build_image
 
     - block:
@@ -101,9 +98,6 @@
             - "  Source: {{ repo_root }}/authentication"
             - "  Target: {{ ecr_domain }}/{{ env_name }}-auth:latest"
 
-      # =====================================================================
-      # Build and Push Frontend Image
-      # =====================================================================
       - name: Build Frontend Docker image
         shell: |
           docker build -t {{ ecr_domain }}/{{ env_name }}-frontend:latest {{ repo_root }}/frontend
@@ -123,9 +117,6 @@
         debug:
           msg: "✓ Frontend image successfully pushed to ECR"
 
-      # =====================================================================
-      # Build and Push Backend Image
-      # =====================================================================
       - name: Build Backend Docker image
         shell: |
           docker build -t {{ ecr_domain }}/{{ env_name }}-backend:latest {{ repo_root }}/backend
@@ -145,9 +136,6 @@
         debug:
           msg: "✓ Backend image successfully pushed to ECR"
 
-      # =====================================================================
-      # Build and Push Auth Image
-      # =====================================================================
       - name: Build Auth Docker image
         shell: |
           docker build -t {{ ecr_domain }}/{{ env_name }}-auth:latest {{ repo_root }}/authentication
@@ -187,9 +175,6 @@
 
       when: build_image | bool
 
-# ==============================================================================
-# PLAY 1 : Récupération des secrets et variables depuis AWS (via le Runner CI)
-# ==============================================================================
 - name: Fetch Secrets and Config from AWS
   hosts: localhost
   connection: local
@@ -198,7 +183,6 @@
     aws_region: "us-east-1"
     env_name: "{{ env_name }}"
   tasks:
-    # 1. Récupérer l'ARN du secret RDS
     - name: Get RDS Secret ARN from SSM Parameter Store
       command: >
         aws ssm get-parameter 
@@ -207,7 +191,6 @@
       register: db_secret_arn_output
       changed_when: false
 
-    # 2. Utiliser l'ARN pour lire le secret réel
     - name: Get RDS Secret Credentials using ARN
       command: >
         aws secretsmanager get-secret-value 
@@ -216,12 +199,10 @@
       register: rds_secret_raw
       changed_when: false
 
-    # 3. Transformer le JSON récupéré en variables utilisables
     - name: Parse RDS Secret JSON
       set_fact:
         db_creds: "{{ rds_secret_raw.stdout | from_json }}"
 
-    # 4. Récupérer l'endpoint (URL) de la BDD
     - name: Get RDS Endpoint from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/rds_endpoint" 
@@ -229,7 +210,6 @@
       register: rds_endpoint_raw
       changed_when: false
 
-    # 5. Récupérer le nom de la BDD pour Auth
     - name: Get Auth DB Name from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/auth_database_name" 
@@ -237,7 +217,6 @@
       register: auth_dbname_raw
       changed_when: false
 
-    # 6. Récupérer le nom de la BDD pour Game/Catalog
     - name: Get Game DB Name from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/game_database_name" 
@@ -245,7 +224,6 @@
       register: game_dbname_raw
       changed_when: false
 
-    # 7. Récupérer l'Instance ID EC2 depuis SSM
     - name: Get EC2 Instance ID from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ec2_instance_id" 
@@ -253,7 +231,6 @@
       register: ec2_instance_id_raw
       changed_when: false
 
-    # 8. Récupérer l'IP publique EC2 depuis SSM
     - name: Get EC2 Public IP from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ec2_public_ip" 
@@ -261,7 +238,6 @@
       register: ec2_public_ip_raw
       changed_when: false
 
-    # 9. Récupérer l'IP privée EC2 depuis SSM
     - name: Get EC2 Private IP from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ec2_private_ip" 
@@ -269,7 +245,6 @@
       register: ec2_private_ip_raw
       changed_when: false
 
-    # 10. Récupérer le nom de la clé SSH depuis SSM
     - name: Get EC2 Key Pair Name from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ec2_key_pair_name" 
@@ -277,7 +252,6 @@
       register: ec2_key_pair_name_raw
       changed_when: false
 
-    # 11. Récupérer le nom du secret de clé privée depuis SSM
     - name: Get EC2 Secret Key Name from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ec2_secret_key_name" 
@@ -285,7 +259,6 @@
       register: ec2_secret_key_name_raw
       changed_when: false
 
-    # 12. Récupérer les URLs ECR depuis SSM
     - name: Get ECR Frontend URL from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/ecr_frontend_url" 
@@ -307,15 +280,11 @@
       register: ecr_auth_url_raw
       changed_when: false
 
-# ==============================================================================
-# PLAY 2 : Installation et Déploiement sur l'instance EC2
-# ==============================================================================
 - name: Configure EC2 and Deploy Application
   hosts: all
   remote_user: ec2-user
   become: yes
   vars:
-    # Récupération des variables collectées dans le Play 1
     db_username: "{{ hostvars['localhost']['db_creds']['username'] }}"
     db_password: "{{ hostvars['localhost']['db_creds']['password'] }}"
     db_endpoint: "{{ hostvars['localhost']['rds_endpoint_raw']['stdout'] }}"
@@ -323,7 +292,6 @@
     game_db_name: "{{ hostvars['localhost']['game_dbname_raw']['stdout'] }}"
     db_port:     "5432"
     
-    # Paramètres EC2 depuis SSM
     ec2_instance_id: "{{ hostvars['localhost']['ec2_instance_id_raw']['stdout'] }}"
     ec2_public_ip: "{{ hostvars['localhost']['ec2_public_ip_raw']['stdout'] }}"
     ec2_private_ip: "{{ hostvars['localhost']['ec2_private_ip_raw']['stdout'] }}"
@@ -332,13 +300,11 @@
     
     aws_region: "us-east-1"
     
-    # URLs ECR depuis SSM
     ecr_frontend_url: "{{ hostvars['localhost']['ecr_frontend_url_raw']['stdout'] }}"
     ecr_backend_url: "{{ hostvars['localhost']['ecr_backend_url_raw']['stdout'] }}"
     ecr_auth_url: "{{ hostvars['localhost']['ecr_auth_url_raw']['stdout'] }}"
 
   tasks:
-    # --- INSTALLATION DES DÉPENDANCES ---
     
     - name: Display EC2 and Database Information
       debug:
@@ -386,8 +352,6 @@
         url: "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64"
         dest: /usr/local/bin/docker-compose
         mode: '0755'
-
-    # --- DÉPLOIEMENT DE L'APPLICATION ---
 
     - name: Create application directory structure
       file:
@@ -478,7 +442,7 @@
         
         if [ $MISSING_IMAGES -eq 1 ]; then
           echo ""
-          echo "⚠️  WARNING: One or more Docker images are missing in ECR!"
+          echo "WARNING: One or more Docker images are missing in ECR!"
           echo ""
           echo "You need to build and push the Docker images first."
           echo "Run these commands from the repository root:"
@@ -638,43 +602,15 @@
           - "║          DEPLOYMENT COMPLETED SUCCESSFULLY!               ║"
           - "╚════════════════════════════════════════════════════════════╝"
           - ""
-          - "📍 EC2 INSTANCE INFORMATION:"
-          - "   • Instance ID: {{ ec2_instance_id }}"
-          - "   • Public IP: {{ ec2_public_ip }}"
-          - "   • Private IP: {{ ec2_private_ip }}"
-          - ""
-          - "🔗 SERVICE ACCESS URLS:"
+          - " SERVICE ACCESS URLS:"
           - "   • Frontend: http://{{ ec2_public_ip }}:80"
           - "   • Auth Service: http://{{ ec2_public_ip }}:8000"
           - "   • Backend API: http://{{ ec2_public_ip }}:8080"
           - "   • Prometheus: http://{{ ec2_public_ip }}:9090"
           - "   • Grafana: http://{{ ec2_public_ip }}:3001"
           - ""
-          - "📊 DATABASE INFORMATION:"
+          - " DATABASE INFORMATION:"
           - "   • Host: {{ db_endpoint }}"
           - "   • Port: {{ db_port }}"
           - "   • Auth Database: {{ auth_db_name }}"
           - "   • Game Database: {{ game_db_name }}"
-          - ""
-          - "🐳 DOCKER IMAGES:"
-          - "   • Frontend: {{ ecr_frontend_url }}:latest"
-          - "   • Backend: {{ ecr_backend_url }}:latest"
-          - "   • Auth: {{ ecr_auth_url }}:latest"
-          - ""
-          - "📝 USEFUL COMMANDS:"
-          - "   • View logs: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose logs -f'"
-          - "   • Container status: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose ps'"
-          - "   • Restart services: ssh -i <key> ec2-user@{{ ec2_public_ip }} 'cd /home/ec2-user/app && docker-compose restart'"
-          - ""
-          - "⚠️  COMMON ISSUES & TROUBLESHOOTING:"
-          - "   1. Page loads infinitely:"
-          - "      - Check backend logs: docker logs backend"
-          - "      - Verify database connectivity: {{ db_endpoint }}:{{ db_port }}"
-          - "      - Check frontend env vars are correct"
-          - "   2. Services not responding:"
-          - "      - Wait 60s for all services to be healthy"
-          - "      - Check network connectivity between containers"
-          - "      - Verify security group allows all necessary ports"
-          - "   3. ECR login failed:"
-          - "      - Verify IAM role has ECR permissions"
-          - "      - Check AWS region is correct: {{ aws_region }}"
