@@ -1,0 +1,95 @@
+name: _Deploy with Terraform
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        description: "AWS Access Key ID"
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        description: "AWS Secret Access Key"
+        required: true
+    outputs:
+      public_ip:
+        description: "EC2 instance public IP"
+        value: ${{ jobs.terraform.outputs.public_ip }}
+      secret_name:
+        description: "Secrets Manager secret name"
+        value: ${{ jobs.terraform.outputs.secret_name }}
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Environment name (e.g. dev, prod)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region for provisioning"
+        required: false
+        default: "us-east-1"
+
+jobs:
+  terraform:
+    name: Terraform Deploy to ${{ inputs.env_name }}
+    runs-on: ubuntu-latest
+    outputs:
+      public_ip: ${{ steps.tf_outputs.outputs.public_ip }}
+      secret_name: ${{ steps.tf_outputs.outputs.secret_name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          python -m pip install --upgrade pip
+          python -m pip install awscli
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.9.8'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Validate AWS credential environment
+        run: |
+          echo "AWS_ACCESS_KEY_ID set: ${AWS_ACCESS_KEY_ID:+yes}"
+          echo "AWS_SECRET_ACCESS_KEY set: ${AWS_SECRET_ACCESS_KEY:+yes}"
+          echo "AWS_SESSION_TOKEN set: ${AWS_SESSION_TOKEN:+yes}"
+          aws configure list
+          aws sts get-caller-identity
+
+      - name: Terraform init
+        working-directory: aws
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: aws
+        run: terraform plan -var-file="environnement/${{ inputs.env_name }}.tfvars"
+
+       
+      - name: Terraform destroy
+        working-directory: aws
+        run: terraform destroy -auto-approve -var-file="environnement/${{ inputs.env_name }}.tfvars"
