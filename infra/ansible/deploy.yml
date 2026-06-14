@@ -210,6 +210,13 @@
       register: rds_endpoint_raw
       changed_when: false
 
+    - name: Get RDS Port from SSM
+      command: >
+        aws ssm get-parameter --name "/{{ env_name }}/rds_port" 
+        --query 'Parameter.Value' --output text --region {{ aws_region }}
+      register: rds_port_raw
+      changed_when: false
+
     - name: Get Auth DB Name from SSM
       command: >
         aws ssm get-parameter --name "/{{ env_name }}/auth_database_name" 
@@ -290,7 +297,7 @@
     db_endpoint: "{{ hostvars['localhost']['rds_endpoint_raw']['stdout'] }}"
     auth_db_name: "{{ hostvars['localhost']['auth_dbname_raw']['stdout'] }}"
     game_db_name: "{{ hostvars['localhost']['game_dbname_raw']['stdout'] }}"
-    db_port:     "5432"
+    db_port:     "{{ hostvars['localhost']['rds_port_raw']['stdout'] | default('5432') }}"
     
     ec2_instance_id: "{{ hostvars['localhost']['ec2_instance_id_raw']['stdout'] }}"
     ec2_public_ip: "{{ hostvars['localhost']['ec2_public_ip_raw']['stdout'] }}"
