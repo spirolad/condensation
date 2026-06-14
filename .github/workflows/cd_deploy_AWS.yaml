@@ -47,8 +47,8 @@ on:
         default: "ec2-user"
 
 jobs:
-  terraform:
-    name: Terraform Deploy to ${{ inputs.env_name }}
+  deploy:
+    name: Deploy to ${{ inputs.env_name }}
     runs-on: ubuntu-latest
     outputs:
       public_ip: ${{ steps.tf_outputs.outputs.public_ip }}
@@ -67,7 +67,7 @@ jobs:
         run: |
           sudo apt-get update
           python -m pip install --upgrade pip
-          python -m pip install awscli
+          python -m pip install awscli ansible boto3 botocore
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v4
@@ -157,33 +157,6 @@ jobs:
           output=json.load(open('/tmp/tf_outputs.json'))
           print(output['ec2_secret_key_name']['value'])
           PY)" >> $GITHUB_OUTPUT
-
-  deploy_ansible:
-    name: Deploy Application with Ansible
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          python -m pip install --upgrade pip
-          python -m pip install awscli ansible boto3 botocore
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v3
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ inputs.aws_region }}
 
       - name: Retrieve EC2 configuration from SSM Parameter Store
         id: ec2_config
