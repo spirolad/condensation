@@ -155,9 +155,6 @@
         debug:
           msg: "✓ Auth image successfully pushed to ECR"
 
-      # =====================================================================
-      # Build Summary
-      # =====================================================================
       - name: Display build completion summary
         debug:
           msg:
