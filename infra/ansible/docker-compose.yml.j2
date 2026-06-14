@@ -51,7 +51,8 @@ services:
       
       # Next.js Configuration
       NODE_ENV: "production"
-      
+      HOSTNAME: "0.0.0.0"
+
       # OAuth Configuration
       CLIENT_ID: "{{ auth_client_id | default('') }}"
       REDIRECT_URI: "{{ frontend_redirect_uri | default('') }}"

@@ -100,31 +100,31 @@ jobs:
           
           echo ""
           echo "=== RDS Subnet Groups ==="
-          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-${ENV}-subnet-group']" --output table 2>/dev/null || echo "❌ app-${ENV}-subnet-group not found"
+          aws rds describe-db-subnet-groups --query "DBSubnetGroups[?DBSubnetGroupName=='app-${ENV}-subnet-group']" --output table 2>/dev/null || echo "app-${ENV}-subnet-group not found"
           
           echo ""
           echo "=== ECR Repositories ==="
-          aws ecr describe-repositories --repository-names ${ENV}-frontend 2>/dev/null && echo "✅ ${ENV}-frontend found" || echo "❌ ${ENV}-frontend not found"
-          aws ecr describe-repositories --repository-names ${ENV}-backend 2>/dev/null && echo "✅ ${ENV}-backend found" || echo "❌ ${ENV}-backend not found"
-          aws ecr describe-repositories --repository-names ${ENV}-auth 2>/dev/null && echo "✅ ${ENV}-auth found" || echo "❌ ${ENV}-auth not found"
+          aws ecr describe-repositories --repository-names ${ENV}-frontend 2>/dev/null && echo "${ENV}-frontend found" || echo "${ENV}-frontend not found"
+          aws ecr describe-repositories --repository-names ${ENV}-backend 2>/dev/null && echo "${ENV}-backend found" || echo "${ENV}-backend not found"
+          aws ecr describe-repositories --repository-names ${ENV}-auth 2>/dev/null && echo "${ENV}-auth found" || echo "${ENV}-auth not found"
           
           echo ""
           echo "=== Secrets Manager ==="
-          aws secretsmanager describe-secret --secret-id ${ENV}-app-secretkey 2>/dev/null && echo "✅ ${ENV}-app-secretkey found" || echo "❌ ${ENV}-app-secretkey not found"
+          aws secretsmanager describe-secret --secret-id ${ENV}-app-secretkey 2>/dev/null && echo "${ENV}-app-secretkey found" || echo "${ENV}-app-secretkey not found"
           
           echo ""
           echo "=== EC2 Key Pairs ==="
-          aws ec2 describe-key-pairs --key-names ${ENV}-ec2-key 2>/dev/null && echo "✅ ${ENV}-ec2-key found" || echo "❌ ${ENV}-ec2-key not found"
+          aws ec2 describe-key-pairs --key-names ${ENV}-ec2-key 2>/dev/null && echo "${ENV}-ec2-key found" || echo "${ENV}-ec2-key not found"
           
           echo ""
           echo "=== Security Groups ==="
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=${ENV}-ec2-sg" 2>/dev/null && echo "✅ ${ENV}-ec2-sg found" || echo "❌ ${ENV}-ec2-sg not found"
-          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-${ENV}-rds-sg" 2>/dev/null && echo "✅ app-${ENV}-rds-sg found" || echo "❌ app-${ENV}-rds-sg not found"
+          aws ec2 describe-security-groups --filters "Name=group-name,Values=${ENV}-ec2-sg" 2>/dev/null && echo "${ENV}-ec2-sg found" || echo "${ENV}-ec2-sg not found"
+          aws ec2 describe-security-groups --filters "Name=group-name,Values=app-${ENV}-rds-sg" 2>/dev/null && echo "app-${ENV}-rds-sg found" || echo "app-${ENV}-rds-sg not found"
           
           echo ""
           echo "=== SSM Parameters ==="
-          aws ssm get-parameter --name "/${ENV}/rds_db_secret" 2>/dev/null && echo "✅ /${ENV}/rds_db_secret found" || echo "❌ /${ENV}/rds_db_secret not found"
-          aws ssm get-parameter --name "/${ENV}/rds_endpoint" 2>/dev/null && echo "✅ /${ENV}/rds_endpoint found" || echo "❌ /${ENV}/rds_endpoint not found"
+          aws ssm get-parameter --name "/${ENV}/rds_db_secret" 2>/dev/null && echo "/${ENV}/rds_db_secret found" || echo "/${ENV}/rds_db_secret not found"
+          aws ssm get-parameter --name "/${ENV}/rds_endpoint" 2>/dev/null && echo "/${ENV}/rds_endpoint found" || echo "/${ENV}/rds_endpoint not found"
           
           echo ""
           echo "=========================================="
