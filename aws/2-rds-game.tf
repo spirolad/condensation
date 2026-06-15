@@ -128,12 +128,42 @@ resource "null_resource" "init_db_game" {
   # Re-run when the instance identifier changes
   triggers = {
     db_instance_identifier = aws_db_instance.postgres_game.identifier
+    schema_checksum        = filesha256("${path.root}/../scripts/V1__create_game_catalog_schema.sql")
+    seed_checksum          = filesha256("${path.root}/../scripts/seed_games.sql")
   }
 
-  depends_on = [aws_db_instance.postgres_game]
+  depends_on = [aws_db_instance.postgres_game, aws_instance.app]
 
-  provisioner "local-exec" {
-    command = "bash -c 'script=\"${path.root}/../scripts/init_db.sh\"; if [ -f \"$script\" ]; then bash \"$script\" \"${var.environment}\"; else echo \"Script not found: $script\" >&2; exit 127; fi'"
+  connection {
+    type        = "ssh"
+    host        = aws_instance.app.public_ip
+    user        = "ec2-user"
+    private_key = tls_private_key.key.private_key_pem
+    timeout     = "5m"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../scripts/init_db.sh"
+    destination = "/tmp/init_db.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../scripts/V1__create_game_catalog_schema.sql"
+    destination = "/tmp/V1__create_game_catalog_schema.sql"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../scripts/seed_games.sql"
+    destination = "/tmp/seed_games.sql"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -euo pipefail",
+      "if command -v dnf >/dev/null 2>&1; then sudo dnf -y install jq postgresql15 || sudo dnf -y install jq postgresql; elif command -v yum >/dev/null 2>&1; then sudo yum -y install jq postgresql; fi",
+      "chmod +x /tmp/init_db.sh",
+      "bash /tmp/init_db.sh \"${var.environment}\"",
+    ]
   }
 }
 

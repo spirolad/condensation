@@ -7,9 +7,19 @@ if [ "$#" -ne 1 ]; then
 fi
 
 ENV="$1"
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCHEMA_FILE="$ROOT_DIR/scripts/V1__create_game_catalog_schema.sql"
-SEED_FILE="$ROOT_DIR/scripts/seed_games.sql"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCHEMA_FILE="${SCHEMA_FILE:-$SCRIPT_DIR/V1__create_game_catalog_schema.sql}"
+SEED_FILE="${SEED_FILE:-$SCRIPT_DIR/seed_games.sql}"
+
+if [ ! -f "$SCHEMA_FILE" ]; then
+  echo "Schema file not found: $SCHEMA_FILE" >&2
+  exit 7
+fi
+
+if [ ! -f "$SEED_FILE" ]; then
+  echo "Seed file not found: $SEED_FILE" >&2
+  exit 8
+fi
 
 for cmd in aws jq psql; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
