@@ -123,3 +123,17 @@ resource "aws_ssm_parameter" "game_database_name" {
   }
 }
 
+# Local provisioner: run DB initialization script after the RDS instance is available.
+resource "null_resource" "init_db_game" {
+  # Re-run when the instance identifier changes
+  triggers = {
+    db_instance_identifier = aws_db_instance.postgres_game.identifier
+  }
+
+  depends_on = [aws_db_instance.postgres_game]
+
+  provisioner "local-exec" {
+    command = "bash \"${path.root}/scripts/init_db.sh\" \"${var.environment}\""
+  }
+}
+
