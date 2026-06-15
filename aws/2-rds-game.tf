@@ -133,7 +133,7 @@ resource "null_resource" "init_db_game" {
   depends_on = [aws_db_instance.postgres_game]
 
   provisioner "local-exec" {
-    command = "bash \"${path.root}/scripts/init_db.sh\" \"${var.environment}\""
+    command = "bash -c 'script=\"${path.root}/../scripts/init_db.sh\"; if [ -f \"$script\" ]; then bash \"$script\" \"${var.environment}\"; else echo \"Script not found: $script\" >&2; exit 127; fi'"
   }
 }
 
