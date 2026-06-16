@@ -76,18 +76,18 @@ services:
       - "8080:8080"
     environment:
       # Database Configuration
-      SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ db_endpoint }}:{{ db_port }}/{{ game_db_name }}"
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ db_game_endpoint }}:{{ db_game_port }}/{{ game_db_name }}"
       SPRING_DATASOURCE_USERNAME: "{{ db_username }}"
-      SPRING_DATASOURCE_PASSWORD: "{{ db_password }}"
+      SPRING_DATASOURCE_PASSWORD: "{{ db_game_password }}"
       SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
 
       # Database Configuration
       DB_CONNECTION: "pgsql"
-      DB_HOST: "{{ db_endpoint }}"
-      DB_PORT: "{{ db_port }}"
+      DB_HOST: "{{ db_game_endpoint }}"
+      DB_PORT: "{{ db_game_port }}"
       DB_DATABASE: "{{ game_db_name }}"
       DB_USER: "{{ db_username }}"
-      DB_PASSWORD: "{{ db_password }}"
+      DB_PASSWORD: "{{ db_game_password }}"
       
       # Service URLs
       AUTH_URL: "http://auth:80"
